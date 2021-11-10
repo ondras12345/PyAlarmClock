@@ -35,6 +35,29 @@ class TestConfiguration(unittest.TestCase):
     def test_inhibit(self):
         self.ac.inhibit = True
         self.assertEqual(self.ac.inhibit, True)
+
+        alarm_old = self.ac.read_alarm(0)
+        self.ac.lamp = False
+
+        self.ac.RTC_time = datetime.datetime(2021, 1, 1, 12, 33, 50)
+
+        alarm = Alarm(enabled=AlarmEnabled.SGL,
+                      days_of_week=DaysOfWeek(),
+                      time=TimeOfDay(12, 34),
+                      snooze=Snooze(1, 1),
+                      signalization=Signalization(120, True, True)
+                      )
+        alarm.days_of_week.Friday = True
+        self.ac.write_alarm(0, alarm)
+        self.assertEqual(self.ac.read_alarm(0), alarm)
+        self.ac.RTC_time = datetime.datetime(2021, 1, 1, 12, 33, 58)
+        time.sleep(5)
+        self.assertEqual(self.ac.lamp, False)
+
+        self.assertEqual(self.ac.read_alarm(0).enabled, AlarmEnabled.SGL)
+
+        self.ac.write_alarm(0, alarm_old)
+
         self.ac.inhibit = False
         self.assertEqual(self.ac.inhibit, False)
 

@@ -329,6 +329,7 @@ class AlarmClock:
     @property
     def ambient(self):
         return self.run_command('amb')['ambient']['target']
+        # TODO add getter for current value
 
     @ambient.setter
     def ambient(self, value: int):
