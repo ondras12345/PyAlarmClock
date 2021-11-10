@@ -350,7 +350,10 @@ class AlarmClock:
 
     @RTC_time.setter
     def RTC_time(self, value: datetime.datetime) -> None:
-        """Be careful when setting RTC time at around midnight..."""
+        """Set RTC time.
+
+        Be careful when setting RTC time around midnight, the operation is NOT
+        atomic. Time is set first, then date."""
         # set time first to avoid delay
         self.run_command(value.strftime('st%H:%M:%S'))
         self.run_command(value.strftime('sd%Y-%m-%d'))
