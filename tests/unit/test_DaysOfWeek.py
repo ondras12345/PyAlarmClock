@@ -74,5 +74,4 @@ class TestDaysOfWeek(unittest.TestCase):
 if __name__ == '__main__':
     # This is not useful because the PyAlarmClock module will not be
     # found if executed directly.
-    # Run `python3 -m unittest` in the root of the repository to run all tests.
     unittest.main()

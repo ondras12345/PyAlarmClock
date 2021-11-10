@@ -1,6 +1,8 @@
 # PyAlarmClock
-A Python 3 library for interfacing with my [AlarmClock][AlarmClock] over
+A Python library for interfacing with my [AlarmClock][AlarmClock] over
 a serial port.
+
+This requires AlarmClock version >=0.5.0.
 
 
 ## TODO list
