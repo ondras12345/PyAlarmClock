@@ -343,6 +343,9 @@ class AlarmClock:
             raise ValueError(f'{index} is not a valid alarm index '
                              f'(0...{self.number_of_alarms})')
         self.run_command(f'sel{index}')
+        if self.__serial.prompt != f'A{index}':
+            raise AssertionError(
+                f"AlarmClock prompt is incorrect: {self.__serial.prompt}")
         return Alarm.from_dict(self.run_command('ls')[f'alarm{index}'])
 
     def read_alarms(self) -> List[Alarm]:
@@ -362,6 +365,9 @@ class AlarmClock:
                              f'(0...{self.number_of_alarms})')
         current = self.read_alarm(index)
         # read_alarm has already selected the correct alarm
+        if self.__serial.prompt != f'A{index}':
+            raise AssertionError(
+                f"AlarmClock prompt is incorrect: {self.__serial.prompt}")
         if current.enabled != value.enabled:
             self.run_command(f'en-{value.enabled.name.lower()}')
         for day in list(range(1, 8)):
