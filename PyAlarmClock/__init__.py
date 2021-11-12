@@ -1,3 +1,5 @@
+"""A Python library for interfacing with AlarmClock over a serial port."""
+
 from enum import Enum
 import serial  # type: ignore
 import logging
@@ -12,6 +14,8 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class CommandErrorCode(Enum):
+    """An enumeration of all errors that can be returned by AlarmClock CLI."""
+
     Ok = 0
     ArgumentError = 1
     NothingSelected = 2
@@ -19,7 +23,14 @@ class CommandErrorCode(Enum):
     NotFound = 8
 
 
+# TODO make everything json serializable
 class DaysOfWeek:
+    """An object that stores a boolean value for each day of the week.
+
+    It can read or produce a one byte code compatible with what AlarmClock
+    uses.
+    """
+
     days = {
         'Monday': 1,
         'Tuesday': 2,
@@ -31,21 +42,32 @@ class DaysOfWeek:
         }
 
     def __init__(self, code=0):
+        """Initialize the DaysOfWeek object with specified code or 0x00.
+
+        Code is a single byte binary representation of the object.
+        0x00 means all stored values are False.
+        """
         # Filter out bit 0. It has no meaning and should always be zero.
         self.code = code & 0xFE
 
     def get_day(self, day):
+        """Get the boolean value for a single day of the week."""
         if isinstance(day, str):
             if day not in self.days:
                 raise TypeError(f'unknown day: {repr(day)}')
             day = self.days[day]
+        if day < 1 or day > 7:
+            raise ValueError(f"{day} is not a valid day of the week")
         return self.code & (2**day) > 0
 
     def set_day(self, day, value):
+        """Set the boolean value for a single day of the week."""
         if isinstance(day, str):
             if day not in self.days:
                 raise TypeError(f'unknown day: {repr(day)}')
             day = self.days[day]
+        if day < 1 or day > 7:
+            raise ValueError(f"{day} is not a valid day of the week")
         if value:
             self.code |= (2**day)
         else:
@@ -74,9 +96,15 @@ class DaysOfWeek:
 
     @property
     def active_days(self):
+        """Get an array of days of the week for which the stored value is True.
+
+        Names of the days of the week are returned as strings with the first
+        letter capitalized.
+        """
         return [day for day in self.days if self.get_day(day)]
 
     def __str__(self):
+        """Get all days for which the stored value is True joined with ', '."""
         return ', '.join(self.active_days)
 
     def __repr__(self):
@@ -87,6 +115,8 @@ class DaysOfWeek:
 
 
 class AlarmEnabled(Enum):
+    """An enumeration of all possible states of Alarm.enabled."""
+
     OFF = 0
     SGL = 1
     RPT = 2
@@ -95,12 +125,19 @@ class AlarmEnabled(Enum):
 
 @dataclass
 class Signalization:
+    """Representation of signalization settings of an alarm."""
+
     ambient: int
     lamp: bool
     buzzer: bool
 
     @classmethod
     def from_dict(cls, d):
+        """Create an instance from a dict.
+
+        The dict needs to contain the following
+        keys: 'ambient', 'lamp', 'buzzer'.
+        """
         return cls(ambient=d['ambient'],
                    lamp=bool(d['lamp']),
                    buzzer=bool(d['buzzer']))
@@ -108,18 +145,24 @@ class Signalization:
 
 @dataclass
 class TimeOfDay:
+    """Representation of a time of day with minutes precision."""
+
     hours: int
     minutes: int
 
 
 @dataclass
 class Snooze:
+    """Representation of snooze settings of an alarm."""
+
     time: int  # in minutes, max 99
     count: int  # max 9
 
 
 @dataclass
 class Alarm:
+    """Representation of a single alarm."""
+
     enabled: AlarmEnabled
     days_of_week: DaysOfWeek
     time: TimeOfDay
@@ -128,6 +171,11 @@ class Alarm:
 
     @classmethod
     def from_dict(cls, d):
+        """Create an instance from a dict.
+
+        The dict needs to contain the following
+        keys: 'enabled', 'dow', 'time', 'snz', 'sig'.
+        """
         return cls(
             enabled=AlarmEnabled[d['enabled']],
             days_of_week=DaysOfWeek(d['dow']),
@@ -153,7 +201,9 @@ class Alarm:
 
 
 class CommandError(Exception):
-    def __init__(self, code, message='Alarm clock returned error'):
+    """Error returned from AlarmClock during command execution."""
+
+    def __init__(self, code, message='AlarmClock returned error'):
         self.code = code
         self.message = message
         super().__init__(self.message)
@@ -163,9 +213,13 @@ class CommandError(Exception):
 
 
 class AlarmClock:
+    """Representation of an AlarmClock connected via a serial port."""
+
     class Serial:
+        """An object that handles serial port communication with AlarmClock."""
+
         class PromptTimeout(Exception):
-            pass
+            """Timeout when waiting for a prompt."""
 
         ERROR_REGEX = "^err (0x[0-9]{,2}): .*\r?$"
         PROMPT_REGEX = "^(A?[0-9]{,3})> "
@@ -173,6 +227,11 @@ class AlarmClock:
         YAML_END_REGEX = "^[.]{3}\r?$"
 
         def __init__(self, port, baudrate):
+            """Initialize the serial port connection.
+
+            This can take a few seconds because it needs to wait until
+            a prompt is received.
+            """
             _LOGGER.info('Initializing serial port')
             self.ser = serial.Serial()
             self.ser.port = port
@@ -195,7 +254,9 @@ class AlarmClock:
                 self.process_command('sync')
 
         def wait_for_prompt(self, timeout_count_max=4):
-            """This function should only be called after a command is sent.
+            """Wait unit a prompt is received on the serial port.
+
+            This function should only be called after a command is sent.
             Otherwise, the whole thing would get stuck waiting for a prompt
             that will never come. `PromptTimeout` is raised after
             `timeout_count_max` timeouts of `ser.read()`.
@@ -225,13 +286,13 @@ class AlarmClock:
             _LOGGER.debug('Prompt received')
 
         def send(self, command):
-            """Send a string to the serial port"""
+            """Send a string to the serial port."""
             a = command.encode('ASCII')
             _LOGGER.debug(f'Sending: {a}')
             self.ser.write(a)
 
         def process_command(self, command):
-            """Send a command and get it's output"""
+            """Send a command and get it's output."""
             self.send(command + '\n')
             line = ''
             yaml_output = ''
@@ -259,15 +320,14 @@ class AlarmClock:
             return error, yaml_output
 
     def __init__(self, port, baudrate=9600):
+        """Initialize the object and establish serial communication."""
         self.__serial = self.Serial(port, baudrate)
         a = self.run_command('ver')['ver']
         self.number_of_alarms = a['number of alarms']
         self.build_time = a['build time']
 
     def run_command(self, command: str):
-        """Send a command to the alarm clock, parse it's YAML output and
-        return the result
-        """
+        """Send a command, parse it's YAML output and return the result."""
         error, yaml_output = self.__serial.process_command(command)
         if error != CommandErrorCode.Ok:
             raise CommandError(error)
@@ -278,6 +338,7 @@ class AlarmClock:
         return output
 
     def read_alarm(self, index: int) -> Alarm:
+        """Read a single alarm."""
         if index < 0 or index >= self.number_of_alarms:
             raise ValueError(f'{index} is not a valid alarm index '
                              f'(0...{self.number_of_alarms})')
@@ -285,13 +346,17 @@ class AlarmClock:
         return Alarm.from_dict(self.run_command('ls')[f'alarm{index}'])
 
     def read_alarms(self) -> List[Alarm]:
-        """This uses the la command and is much faster than calling
-        `read_alarm` in a loop"""
+        """Read all alarms.
+
+        This uses the la command and is much faster than calling `read_alarm`
+        in a loop.
+        """
         output = self.run_command('la')
         alarms = [Alarm.from_dict(output[key]) for key in output]
         return alarms
 
     def write_alarm(self, index: int, value: Alarm) -> None:
+        """Write an alarm."""
         if index < 0 or index >= self.number_of_alarms:
             raise ValueError(f'{index} is not a valid alarm index '
                              f'(0...{self.number_of_alarms})')
@@ -299,8 +364,9 @@ class AlarmClock:
         # read_alarm has already selected the correct alarm
         if current.enabled != value.enabled:
             self.run_command(f'en-{value.enabled.name.lower()}')
-        for day in [x for x in range(1, 8)]:
+        for day in list(range(1, 8)):
             bit = 2**day
+            # TODO DaysOfWeek diff
             new_bit_value = int(bool(value.days_of_week.code & bit))
             if int(bool(current.days_of_week.code & bit)) != new_bit_value:
                 self.run_command(f'dow{day}:{new_bit_value}')
@@ -315,7 +381,10 @@ class AlarmClock:
             self.run_command(f'sig{ambient};{lamp};{buzzer}')
 
     def save_EEPROM(self) -> None:
-        """Don't forget that this can raise 'UselessSave' error"""
+        """Save all changes to the EEPROM.
+
+        This can raise 'UselessSave' error.
+        """
         self.run_command('sav')
 
     @property
@@ -354,7 +423,8 @@ class AlarmClock:
         """Set RTC time.
 
         Be careful when setting RTC time around midnight, the operation is NOT
-        atomic. Time is set first, then date."""
+        atomic. Time is set first, then date.
+        """
         # set time first to avoid delay
         self.run_command(value.strftime('st%H:%M:%S'))
         self.run_command(value.strftime('sd%Y-%m-%d'))
@@ -372,8 +442,11 @@ class AlarmClock:
                 otherself.__events = Signalization.from_dict(out)
 
             def get_all(otherself):
-                """This gets all info about the timer with one command. It is
-                much faster than querying the individual properties"""
+                """Get all info about the timer with a single command.
+
+                This is much faster than querying the individual properties
+                one by one.
+                """
                 @dataclass
                 class TimerInfo:
                     time: datetime.timedelta
@@ -427,20 +500,20 @@ class AlarmClock:
         return CountdownTimer()
 
     def __enter__(self):
-        """For use with `with`"""
+        """For use with `with`."""
         return self
 
     def __exit__(self, type, value, traceback):
-        """For use with `with`"""
+        """For use with `with`."""
         self.close()
         return False
 
     def is_open(self):
-        """Report whether the serial port is open"""
+        """Return True if the serial port is open."""
         return self.__serial.ser.isOpen()
 
     def close(self):
-        """Close the serial port"""
+        """Close the serial port."""
         _LOGGER.debug('Closing serial port')
         self.__serial.ser.close()
 
