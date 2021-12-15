@@ -129,7 +129,7 @@ class TestConfiguration(unittest.TestCase):
         self.assertEqual(self.ac.lamp, True)
 
         # user will need to stop the alarm manually
-        input("Press snooze")
+        input("Press snooze (confirm every action by pressing return)")
         self.assertEqual(self.ac.lamp, False)
         input("Wait until it retriggers; press snooze (should NOT work)")
         self.assertEqual(self.ac.lamp, True)

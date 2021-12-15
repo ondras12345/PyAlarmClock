@@ -21,6 +21,14 @@ class CommandErrorCode(Enum):
     NothingSelected = 2
     UselessSave = 4
     NotFound = 8
+    Unsupported = 16
+
+
+EEPROM_SIZE = 1024
+EEPROM_MELODIES_HEADER_START = 0x0010
+EEPROM_MELODIES_COUNT = 16
+EEPROM_MELODIES_DATA_START = 0x0100
+EEPROM_ALARMS_START = 0x0040
 
 
 # TODO make everything json serializable
@@ -129,7 +137,7 @@ class Signalization:
 
     ambient: int
     lamp: bool
-    buzzer: bool
+    buzzer: int  # TODO enum for melodies
 
     @classmethod
     def from_dict(cls, d):
@@ -140,7 +148,7 @@ class Signalization:
         """
         return cls(ambient=d['ambient'],
                    lamp=bool(d['lamp']),
-                   buzzer=bool(d['buzzer']))
+                   buzzer=d['buzzer'])
 
 
 @dataclass
@@ -504,6 +512,28 @@ class AlarmClock:
                 otherself.running = False
 
         return CountdownTimer()
+
+    class EEPROMArray:
+        # I cannot specify ac: AlarmClock because AlarmClock is not defined.
+        def __init__(self, ac):
+            self.ac = ac
+
+        def __getitem__(self, key: int) -> int:
+            if key < 0 or key >= EEPROM_SIZE:
+                raise KeyError(key)
+            return self.ac.run_command(f'eer{key}')['EEPROM'][key]
+
+        def __setitem__(self, key: int, value: int):
+            if key < 0 or key >= EEPROM_SIZE:
+                raise KeyError(key)
+            if value < 0 or value > 255:
+                raise ValueError(f"{value} is not an unsigned 8bit integer")
+            self.ac.run_command(f'eew{key};{value}')
+
+    @property
+    def EEPROM(self):
+        """Direct read/write access to the EEPROM."""
+        return self.EEPROMArray(self)
 
     def __enter__(self):
         """For use with `with`."""

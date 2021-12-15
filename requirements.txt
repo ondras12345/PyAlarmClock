@@ -16,3 +16,4 @@ stevedore==3.5.0
 toml==0.10.2
 types-PyYAML==6.0.0
 typing-extensions==3.10.0.2
+tqdm==4.62.3
