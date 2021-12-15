@@ -53,7 +53,7 @@ if __name__ == '__main__':
 
     logging.basicConfig(level=logging.INFO)
 
-    with PyAlarmClock.AlarmClock(args.device, args.baudrate) as ac:
+    with PyAlarmClock.SerialAlarmClock(args.device, args.baudrate) as ac:
         if args.operation == "read":
             for address in tqdm(range(args.address, args.address+args.size)):
                 args.file.write(bytes([ac.EEPROM[address]]))

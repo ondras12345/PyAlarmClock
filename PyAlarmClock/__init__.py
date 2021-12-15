@@ -221,129 +221,20 @@ class CommandError(Exception):
 
 
 class AlarmClock:
-    """Representation of an AlarmClock connected via a serial port."""
+    """Base class for representations of an AlarmClock communications adapter.
 
-    class Serial:
-        """An object that handles serial port communication with AlarmClock."""
+    Specifying how to communicate with the AlarmClock is left to derived
+    classes that need to implement run_command.
+    """
 
-        class PromptTimeout(Exception):
-            """Timeout when waiting for a prompt."""
-
-        ERROR_REGEX = "^err (0x[0-9]{,2}): .*\r?$"
-        PROMPT_REGEX = "^(A?[0-9]{,3})> "
-        YAML_BEGIN_REGEX = "^---\r?$"
-        YAML_END_REGEX = "^[.]{3}\r?$"
-
-        def __init__(self, port, baudrate):
-            """Initialize the serial port connection.
-
-            This can take a few seconds because it needs to wait until
-            a prompt is received.
-            """
-            _LOGGER.info('Initializing serial port')
-            self.ser = serial.Serial()
-            self.ser.port = port
-            self.ser.baudrate = baudrate
-            # If you change this timeout, please check if `wait_for_prompt`
-            # still works properly.
-            self.ser.timeout = 1
-            # This does not prevent a reset because the dtr line still falls
-            # to 0 V for 1 to 2 ms, which seems to be enough to reset the MCU.
-            # self.ser.dtr = False
-            self.ser.open()
-            self.prompt = ''
-            try:
-                self.wait_for_prompt()
-            except self.PromptTimeout:
-                # This should happen if opening the serial port does not cause
-                # a reset of the Arduino. To prevent it from resetting, try
-                # something like this:
-                # stty -F /dev/ttyUSB0 -hup
-                self.process_command('sync')
-
-        def wait_for_prompt(self, timeout_count_max=4):
-            """Wait unit a prompt is received on the serial port.
-
-            This function should only be called after a command is sent.
-            Otherwise, the whole thing would get stuck waiting for a prompt
-            that will never come. `PromptTimeout` is raised after
-            `timeout_count_max` timeouts of `ser.read()`.
-            """
-            _LOGGER.debug('Waiting for prompt...')
-            line = ''
-            match = None
-            timeout_count = 0
-            while not match:
-                if timeout_count >= timeout_count_max:
-                    raise self.PromptTimeout()
-                char = self.ser.read(1).decode('ASCII')
-                if char == '':
-                    _LOGGER.debug('timeout')
-                    timeout_count += 1
-                    continue
-                _LOGGER.debug(f'got: {char}')
-                if char in ['\r', '\n']:
-                    # We don't care about ending the line, PROMPT_REGEX does
-                    # not require that.
-                    line = ''
-                else:
-                    line += char
-                    match = re.match(self.PROMPT_REGEX, line)
-
-            self.prompt = match.group(1)
-            _LOGGER.debug('Prompt received')
-
-        def send(self, command):
-            """Send a string to the serial port."""
-            a = command.encode('ASCII')
-            _LOGGER.debug(f'Sending: {a}')
-            self.ser.write(a)
-
-        def process_command(self, command):
-            """Send a command and get it's output."""
-            self.send(command + '\n')
-            line = ''
-            yaml_output = ''
-            error_line = None
-            in_yaml = False
-            while not error_line:
-                line = self.ser.readline().decode('ASCII')
-                _LOGGER.debug(f'got: {repr(line)}')
-                if re.match(self.YAML_BEGIN_REGEX, line):
-                    in_yaml = True
-                    _LOGGER.debug('Entered YAML command output')
-
-                if in_yaml:
-                    yaml_output += line
-
-                if re.match(self.YAML_END_REGEX, line):
-                    in_yaml = False
-                    _LOGGER.debug('Exited YAML command output')
-
-                error_line = re.match(self.ERROR_REGEX, line)
-
-            error = CommandErrorCode(int(error_line.group(1), 0))
-            self.wait_for_prompt()
-
-            return error, yaml_output
-
-    def __init__(self, port, baudrate=9600):
-        """Initialize the object and establish serial communication."""
-        self.__serial = self.Serial(port, baudrate)
+    def __init__(self):
         a = self.run_command('ver')['ver']
         self.number_of_alarms = a['number of alarms']
         self.build_time = a['build time']
 
     def run_command(self, command: str):
         """Send a command, parse it's YAML output and return the result."""
-        error, yaml_output = self.__serial.process_command(command)
-        if error != CommandErrorCode.Ok:
-            raise CommandError(error)
-        if yaml_output == '':
-            return None
-        _LOGGER.debug(f'Parsing YAML:\n{yaml_output}')
-        output = yaml.safe_load(yaml_output)
-        return output
+        raise NotImplementedError()
 
     def read_alarm(self, index: int) -> Alarm:
         """Read a single alarm."""
@@ -351,9 +242,6 @@ class AlarmClock:
             raise ValueError(f'{index} is not a valid alarm index '
                              f'(0...{self.number_of_alarms})')
         self.run_command(f'sel{index}')
-        if self.__serial.prompt != f'A{index}':
-            raise AssertionError(
-                f"AlarmClock prompt is incorrect: {self.__serial.prompt}")
         return Alarm.from_dict(self.run_command('ls')[f'alarm{index}'])
 
     def read_alarms(self) -> List[Alarm]:
@@ -373,9 +261,6 @@ class AlarmClock:
                              f'(0...{self.number_of_alarms})')
         current = self.read_alarm(index)
         # read_alarm has already selected the correct alarm
-        if self.__serial.prompt != f'A{index}':
-            raise AssertionError(
-                f"AlarmClock prompt is incorrect: {self.__serial.prompt}")
         if current.enabled != value.enabled:
             self.run_command(f'en-{value.enabled.name.lower()}')
         for day in list(range(1, 8)):
@@ -535,6 +420,137 @@ class AlarmClock:
         """Direct read/write access to the EEPROM."""
         return self.EEPROMArray(self)
 
+
+class SerialAlarmClock(AlarmClock):
+    """Representation of an AlarmClock connected via a serial port."""
+
+    class Serial:
+        """An object that handles serial port communication with AlarmClock."""
+
+        class PromptTimeout(Exception):
+            """Timeout when waiting for a prompt."""
+
+        ERROR_REGEX = "^err (0x[0-9]{,2}): .*\r?$"
+        PROMPT_REGEX = "^(A?[0-9]{,3})> "
+        YAML_BEGIN_REGEX = "^---\r?$"
+        YAML_END_REGEX = "^[.]{3}\r?$"
+
+        def __init__(self, port, baudrate):
+            """Initialize the serial port connection.
+
+            This can take a few seconds because it needs to wait until
+            a prompt is received.
+            """
+            _LOGGER.info('Initializing serial port')
+            self.ser = serial.Serial()
+            self.ser.port = port
+            self.ser.baudrate = baudrate
+            # If you change this timeout, please check if `wait_for_prompt`
+            # still works properly.
+            self.ser.timeout = 1
+            # This does not prevent a reset because the dtr line still falls
+            # to 0 V for 1 to 2 ms, which seems to be enough to reset the MCU.
+            # self.ser.dtr = False
+            self.ser.open()
+            self.prompt = ''
+            try:
+                self.wait_for_prompt()
+            except self.PromptTimeout:
+                # This should happen if opening the serial port does not cause
+                # a reset of the Arduino. To prevent it from resetting, try
+                # something like this:
+                # stty -F /dev/ttyUSB0 -hup
+                self.process_command('sync')
+
+        def wait_for_prompt(self, timeout_count_max=4):
+            """Wait unit a prompt is received on the serial port.
+
+            This function should only be called after a command is sent.
+            Otherwise, the whole thing would get stuck waiting for a prompt
+            that will never come. `PromptTimeout` is raised after
+            `timeout_count_max` timeouts of `ser.read()`.
+            """
+            _LOGGER.debug('Waiting for prompt...')
+            line = ''
+            match = None
+            timeout_count = 0
+            while not match:
+                if timeout_count >= timeout_count_max:
+                    raise self.PromptTimeout()
+                char = self.ser.read(1).decode('ASCII')
+                if char == '':
+                    _LOGGER.debug('timeout')
+                    timeout_count += 1
+                    continue
+                _LOGGER.debug(f'got: {char}')
+                if char in ['\r', '\n']:
+                    # We don't care about ending the line, PROMPT_REGEX does
+                    # not require that.
+                    line = ''
+                else:
+                    line += char
+                    match = re.match(self.PROMPT_REGEX, line)
+
+            self.prompt = match.group(1)
+            _LOGGER.debug('Prompt received')
+
+        def send(self, command):
+            """Send a string to the serial port."""
+            a = command.encode('ASCII')
+            _LOGGER.debug(f'Sending: {a}')
+            self.ser.write(a)
+
+        def process_command(self, command):
+            """Send a command and get it's output."""
+            self.send(command + '\n')
+            line = ''
+            yaml_output = ''
+            error_line = None
+            in_yaml = False
+            while not error_line:
+                line = self.ser.readline().decode('ASCII')
+                _LOGGER.debug(f'got: {repr(line)}')
+                if re.match(self.YAML_BEGIN_REGEX, line):
+                    in_yaml = True
+                    _LOGGER.debug('Entered YAML command output')
+
+                if in_yaml:
+                    yaml_output += line
+
+                if re.match(self.YAML_END_REGEX, line):
+                    in_yaml = False
+                    _LOGGER.debug('Exited YAML command output')
+
+                error_line = re.match(self.ERROR_REGEX, line)
+
+            error = CommandErrorCode(int(error_line.group(1), 0))
+            self.wait_for_prompt()
+
+            return error, yaml_output
+
+    def __init__(self, port, baudrate=9600):
+        """Initialize the object and establish serial communication."""
+        self.__serial = self.Serial(port, baudrate)
+        super().__init__()
+
+    def run_command(self, command: str):
+        """Send a command, parse it's YAML output and return the result."""
+        error, yaml_output = self.__serial.process_command(command)
+        if error != CommandErrorCode.Ok:
+            raise CommandError(error)
+        if yaml_output == '':
+            return None
+        _LOGGER.debug(f'Parsing YAML:\n{yaml_output}')
+        output = yaml.safe_load(yaml_output)
+        return output
+
+    def read_alarm(self, index: int) -> Alarm:
+        alarm = super().read_alarm(index)
+        if self.__serial.prompt != f'A{index}':
+            raise AssertionError(
+                f"AlarmClock prompt is incorrect: {self.__serial.prompt}")
+        return alarm
+
     def __enter__(self):
         """For use with `with`."""
         return self
@@ -556,3 +572,8 @@ class AlarmClock:
     # def open(self):
     #     """Open the serial port"""
     #     self.__serial.ser.open()
+
+
+# Warning: If you try to implement something like MQTTAlarmClock, keep in mind
+# that there might be hidden race conditions - e.g. you need to `sel` the
+# correct alarm before you `ls`.

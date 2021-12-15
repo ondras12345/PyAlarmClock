@@ -19,7 +19,7 @@ class TestConfiguration(unittest.TestCase):
 
     @classmethod
     def setUpClass(self):
-        self.ac = PyAlarmClock.AlarmClock('/dev/ttyUSB0')
+        self.ac = PyAlarmClock.SerialAlarmClock('/dev/ttyUSB0')
 
     @classmethod
     def tearDownClass(self):
@@ -28,9 +28,9 @@ class TestConfiguration(unittest.TestCase):
 
     def test_select_deselect(self):
         self.ac.run_command('sel')
-        self.assertEqual(self.ac._AlarmClock__serial.prompt, '')
+        self.assertEqual(self.ac._SerialAlarmClock__serial.prompt, '')
         self.ac.run_command('sel0')
-        self.assertEqual(self.ac._AlarmClock__serial.prompt, 'A0')
+        self.assertEqual(self.ac._SerialAlarmClock__serial.prompt, 'A0')
 
     def test_inhibit(self):
         self.ac.inhibit = True
