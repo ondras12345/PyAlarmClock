@@ -451,7 +451,10 @@ class SerialAlarmClock(AlarmClock):
             """
             old_timeout = self.ser.timeout
             self.ser.timeout = 0
-            while character := self.ser.read(1).decode('ASCII'):
+            while True:
+                character = self.ser.read(1).decode('ASCII')
+                if not character:
+                    break
                 _LOGGER.debug(f'check_bel_received got: {repr(character)}')
                 if character == '\a':
                     self.bel_received = True
