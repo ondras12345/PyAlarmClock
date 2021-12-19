@@ -1,4 +1,4 @@
-.PHONY: test test_hardware lint bandit
+.PHONY: all test test_hardware lint bandit
 
 all: test lint bandit  # test_hardware needs to be started manually
 
@@ -10,7 +10,7 @@ test_hardware:
 
 lint:
 	-flake8 --exclude .git,__pycache__,venv
-	-mypy PyAlarmClock/__init__.py tests/unit/test_*.py tests/integration/test_*.py Examples/*.py
+	-mypy PyAlarmClock/*.py tests/unit/test_*.py tests/integration/test_*.py Examples/*.py
 
 bandit:
 	-bandit -r PyAlarmClock/ tests/ Examples/
