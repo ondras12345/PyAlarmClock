@@ -364,6 +364,7 @@ class SerialAlarmClock(AlarmClock):
             # self.ser.dtr = False
             self.ser.open()
             self.prompt = ''
+            self.bel_received = False
             try:
                 self.wait_for_prompt()
             except self.PromptTimeout:
@@ -389,11 +390,13 @@ class SerialAlarmClock(AlarmClock):
                 if timeout_count >= timeout_count_max:
                     raise self.PromptTimeout()
                 char = self.ser.read(1).decode('ASCII')
+                if char == '\a':
+                    self.bel_received = True
                 if char == '':
                     _LOGGER.debug('timeout')
                     timeout_count += 1
                     continue
-                _LOGGER.debug(f'got: {char}')
+                _LOGGER.debug(f'got: {repr(char)}')
                 if char in ['\r', '\n']:
                     # We don't care about ending the line, PROMPT_REGEX does
                     # not require that.
@@ -421,6 +424,8 @@ class SerialAlarmClock(AlarmClock):
             while not error_line:
                 line = self.ser.readline().decode('ASCII')
                 _LOGGER.debug(f'got: {repr(line)}')
+                if '\a' in line:
+                    self.bel_received = True
                 if re.match(self.YAML_BEGIN_REGEX, line):
                     in_yaml = True
                     _LOGGER.debug('Entered YAML command output')
@@ -438,6 +443,24 @@ class SerialAlarmClock(AlarmClock):
             self.wait_for_prompt()
 
             return error, yaml_output
+
+        def check_bel_received(self) -> bool:
+            """Return value of bel_received and clear it.
+
+            This also checks characters in the buffer.
+            """
+            old_timeout = self.ser.timeout
+            self.ser.timeout = 0
+            while character := self.ser.read(1).decode('ASCII'):
+                _LOGGER.debug(f'check_bel_received got: {repr(character)}')
+                if character == '\a':
+                    self.bel_received = True
+            self.ser.timeout = old_timeout
+
+            value = self.bel_received
+            self.bel_received = False
+
+            return value
 
     def __init__(self, port, baudrate=9600):
         """Initialize the object and establish serial communication."""
@@ -461,6 +484,16 @@ class SerialAlarmClock(AlarmClock):
             raise AssertionError(
                 f"AlarmClock prompt is incorrect: {self.__serial.prompt}")
         return alarm
+
+    def state_changed(self) -> bool:
+        """Return true if BEL character was received from AlarmClock.
+
+        This is NOT a blocking call.
+
+        AlarmClock needs to have feature/CLI-BEL merged in order to send
+        BEL (0x07) on state changes.
+        """
+        return self.__serial.check_bel_received()
 
     def __enter__(self):
         """For use with `with`."""
