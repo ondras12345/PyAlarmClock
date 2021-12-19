@@ -62,8 +62,12 @@ class TestConfiguration(unittest.TestCase):
         self.assertEqual(self.ac.inhibit, False)
 
     def test_lamp(self):
+        self.ac.state_changed()  # get rid of old value
+        self.assertFalse(self.ac.state_changed())
         self.ac.lamp = True
         self.assertEqual(self.ac.lamp, True)
+        self.assertTrue(self.ac.state_changed())
+        self.assertFalse(self.ac.state_changed())
         self.ac.lamp = False
         self.assertEqual(self.ac.lamp, False)
 
