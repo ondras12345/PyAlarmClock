@@ -10,7 +10,7 @@ test_hardware:
 
 lint:
 	-flake8 --exclude .git,__pycache__,venv
-	-mypy PyAlarmClock/*.py tests/unit/test_*.py tests/integration/test_*.py Examples/*.py
+	-mypy PyAlarmClock/*.py tests/unit/test_*.py tests/integration/test_*.py examples/*.py
 
 bandit:
-	-bandit -r PyAlarmClock/ tests/ Examples/
+	-bandit -r PyAlarmClock/ tests/ examples/
