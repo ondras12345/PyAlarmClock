@@ -465,7 +465,7 @@ class SerialAlarmClock(AlarmClock):
 
             return value
 
-    def __init__(self, port, baudrate=9600):
+    def __init__(self, port: str, baudrate: int = 9600):
         """Initialize the object and establish serial communication."""
         self.__serial = self.Serial(port, baudrate)
         super().__init__()
