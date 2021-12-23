@@ -225,6 +225,16 @@ class AlarmClockMQTT:
                 raise AlarmClockMQTT.CommandError(
                         f"{type(e).__name__}: {str(e)}")
 
+    class RunCommandCommand(Command):
+        """Run a CLI command, parse it's YAML output and return it as JSON."""
+
+        def do_command(self, ac: AlarmClock, msg: str):
+            try:
+                return json.dumps(ac.run_command(msg), default=str)
+            except Exception as e:
+                raise AlarmClockMQTT.CommandError(
+                        f"{type(e).__name__}: {str(e)}")
+
     def __init__(self, config: AlarmClockMQTTConfig):
         self._config = config
 
@@ -237,6 +247,7 @@ class AlarmClockMQTT:
             'alarm': self.AlarmCommand(),
             'alarms': self.AlarmsCommand(),
             'alarm/write': self.WriteAlarmCommand(),
+            'run_command': self.RunCommandCommand(),
         }
 
         self.ENTITIES = {
