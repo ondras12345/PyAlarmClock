@@ -1,4 +1,6 @@
-# TODO make everything json serializable
+from typing import Union, List
+
+
 class DaysOfWeek:
     """An object that stores a boolean value for each day of the week.
 
@@ -16,7 +18,7 @@ class DaysOfWeek:
         'Sunday': 7,
         }
 
-    def __init__(self, code=0):
+    def __init__(self, code: int = 0):
         """Initialize the DaysOfWeek object with specified code or 0x00.
 
         Code is a single byte binary representation of the object.
@@ -25,7 +27,7 @@ class DaysOfWeek:
         # Filter out bit 0. It has no meaning and should always be zero.
         self.code = code & 0xFE
 
-    def get_day(self, day):
+    def get_day(self, day: Union[str, int]) -> bool:
         """Get the boolean value for a single day of the week."""
         if isinstance(day, str):
             if day not in self.days:
@@ -35,7 +37,7 @@ class DaysOfWeek:
             raise ValueError(f"{day} is not a valid day of the week")
         return self.code & (2**day) > 0
 
-    def set_day(self, day, value):
+    def set_day(self, day: Union[str, int], value: bool) -> None:
         """Set the boolean value for a single day of the week."""
         if isinstance(day, str):
             if day not in self.days:
@@ -70,7 +72,7 @@ class DaysOfWeek:
                       lambda self, value: self.set_day('Sunday', value))
 
     @property
-    def active_days(self):
+    def active_days(self) -> List[str]:
         """Get an array of days of the week for which the stored value is True.
 
         Names of the days of the week are returned as strings with the first
@@ -78,11 +80,11 @@ class DaysOfWeek:
         """
         return [day for day in self.days if self.get_day(day)]
 
-    def __str__(self):
+    def __str__(self) -> str:
         """Get all days for which the stored value is True joined with ', '."""
         return ', '.join(self.active_days)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f'{self.__class__.__name__}({repr(self.code)})'
 
     def __eq__(self, other):

@@ -524,3 +524,5 @@ class SerialAlarmClock(AlarmClock):
 # Warning: If you try to implement something like MQTTAlarmClock, keep in mind
 # that there might be hidden race conditions - e.g. you need to `sel` the
 # correct alarm before you `ls`.
+
+# TODO make everything json serializable
