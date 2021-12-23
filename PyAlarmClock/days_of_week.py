@@ -27,6 +27,14 @@ class DaysOfWeek:
         # Filter out bit 0. It has no meaning and should always be zero.
         self.code = code & 0xFE
 
+    @classmethod
+    def from_list(cls, li: Union[List[str], List[int]]):
+        """Create an instance from a list of str names or numbers of days."""
+        dow = cls()
+        for day in li:
+            dow.set_day(day, True)
+        return dow
+
     def get_day(self, day: Union[str, int]) -> bool:
         """Get the boolean value for a single day of the week."""
         if isinstance(day, str):

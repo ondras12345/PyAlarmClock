@@ -67,6 +67,13 @@ class TestDaysOfWeek(unittest.TestCase):
         self.assertEqual(dow.code, 0x02)
         self.assertRaises(TypeError, dow.set_day, 'test', True)
 
+    def test_from_list(self):
+        dow = DaysOfWeek.from_list(["Tuesday", "Wednesday", "Friday"])
+        self.assertEqual(dow.code, 0x2C)
+
+        dow = DaysOfWeek.from_list([2, 3, 5])
+        self.assertEqual(dow.code, 0x2C)
+
     def test_equal(self):
         self.assertEqual(DaysOfWeek(0x08), DaysOfWeek(0x08))
 
