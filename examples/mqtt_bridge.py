@@ -159,6 +159,21 @@ class AlarmClockMQTT:
         def get_state(self, ac: AlarmClock):
             return getattr(ac, self.name)
 
+    class RTC(Command, Entity):
+        """Real time clock."""
+
+        def do_command(self, ac: AlarmClock, msg: str):
+            if msg == "" or msg == "?":
+                return self.get_state(ac)
+            try:
+                ac.RTC_time = datetime.datetime.fromisoformat(msg)
+            except Exception as e:
+                raise AlarmClockMQTT.CommandError(
+                        f"{type(e).__name__}: {str(e)}")
+
+        def get_state(self, ac: AlarmClock):
+            return ac.RTC_time.astimezone().isoformat(timespec="seconds")
+
     class AlarmCommand(Command):
         """Read an alarm."""
 
@@ -218,6 +233,7 @@ class AlarmClockMQTT:
             'ambient': self.DimmableLight('ambient'),
             'lamp': self.Switch('lamp'),
             'inhibit': self.Switch('inhibit'),
+            'rtc': self.RTC(),
             'alarm': self.AlarmCommand(),
             'alarms': self.AlarmsCommand(),
             'alarm/write': self.WriteAlarmCommand(),
@@ -227,6 +243,7 @@ class AlarmClockMQTT:
             'ambient': self.COMMANDS['ambient'],
             'lamp': self.COMMANDS['lamp'],
             'inhibit': self.COMMANDS['inhibit'],
+            'rtc': self.COMMANDS['rtc'],
         }
 
         _LOGGER.info(f'err topic: {self._config.err_topic}')
