@@ -183,6 +183,33 @@ class AlarmClockMQTT:
                 ret.append((f'alarm{index}', alarm_json))
             return ret
 
+    class WriteAlarmCommand(Command):
+        """Write an alarm and save the changes to the EEPROM."""
+
+        def do_command(self, ac: AlarmClock, msg: str):
+            try:
+                d = json.loads(msg)
+                _LOGGER.debug(f"Got json: {repr(d)}")
+                index = int(d["index"])
+                alarm = Alarm(
+                    enabled=AlarmEnabled[d["enabled"]],
+                    days_of_week=DaysOfWeek.from_list(d["days_of_week"]),
+                    time=TimeOfDay(hours=d["time"]["hours"],
+                                   minutes=d["time"]["minutes"]),
+                    snooze=Snooze(time=d["snooze"]["time"],
+                                  count=d["snooze"]["count"]),
+                    signalization=Signalization(
+                        ambient=d["signalization"]["ambient"],
+                        lamp=d["signalization"]["lamp"],
+                        buzzer=d["signalization"]["buzzer"]
+                        )
+                    )
+                ac.write_alarm(index, alarm)
+                ac.save_EEPROM()
+            except Exception as e:
+                raise AlarmClockMQTT.CommandError(
+                        f"{type(e).__name__}: {str(e)}")
+
     def __init__(self, config: AlarmClockMQTTConfig):
         self._config = config
 
@@ -193,6 +220,7 @@ class AlarmClockMQTT:
             'inhibit': self.Switch('inhibit'),
             'alarm': self.AlarmCommand(),
             'alarms': self.AlarmsCommand(),
+            'alarm/write': self.WriteAlarmCommand(),
         }
 
         self.ENTITIES = {
@@ -251,8 +279,8 @@ class AlarmClockMQTT:
 
         # Subscribing in on_connect() means that if we lose the connection and
         # reconnect then subscriptions will be renewed.
-        _LOGGER.debug(f'Subscribing to {self._config.command_topic}/+')
-        client.subscribe(f'{self._config.command_topic}/+')
+        _LOGGER.debug(f'Subscribing to {self._config.command_topic}/#')
+        client.subscribe(f'{self._config.command_topic}/#')
 
         for entity_id in self.ENTITIES:
             self._report_state(client, entity_id)

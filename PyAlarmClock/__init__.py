@@ -166,7 +166,11 @@ class AlarmClock:
         return alarms
 
     def write_alarm(self, index: int, value: Alarm) -> None:
-        """Write an alarm."""
+        """Write an alarm.
+
+        This does NOT make sure it is saved to the EEPROM. Use save_EEPROM for
+        that.
+        """
         if index < 0 or index >= self.number_of_alarms:
             raise ValueError(f'{index} is not a valid alarm index '
                              f'(0...{self.number_of_alarms})')
