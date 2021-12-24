@@ -32,13 +32,15 @@ class JSON_AlarmClock(json.JSONEncoder):
         if isinstance(obj, Enum):
             return obj.name
         if (isinstance(obj, Snooze) or isinstance(obj, Signalization) or
-                isinstance(obj, Alarm) or isinstance(obj, TimeOfDay)):
+                isinstance(obj, Alarm) or isinstance(obj, TimeOfDay) or
+                isinstance(obj, AlarmClock.CountdownTimer.TimerInfo)):
             return obj.__dict__
         if isinstance(obj, DaysOfWeek):
             return obj.active_days  # TODO also return code ??
         if isinstance(obj, AlarmEnabled):
             return obj.name
-        if isinstance(obj, datetime.datetime):
+        if (isinstance(obj, datetime.datetime) or
+                isinstance(obj, datetime.timedelta)):
             return str(obj)
         return super().default(obj)
 
@@ -174,6 +176,49 @@ class AlarmClockMQTT:
         def get_state(self, ac: AlarmClock):
             return ac.RTC_time.astimezone().isoformat(timespec="seconds")
 
+    class CountdownTimer(Command, Entity):
+        def do_command(self, ac: AlarmClock, msg: str):
+            messages = {
+                'START': ac.countdown_timer.start,
+                'STOP': ac.countdown_timer.stop,
+                '?': lambda: None,  # empty lambda - only stat
+                '': lambda: None,
+            }
+
+            if msg.upper() in messages:
+                messages[msg.upper()]()
+                return self.get_state(ac)
+            else:
+                try:
+                    d = json.loads(msg)
+                    _LOGGER.debug(f"Got json: {repr(d)}")
+                    if "events" in d:
+                        ac.countdown_timer.events = Signalization(
+                            ambient=d["events"]["ambient"],
+                            lamp=d["events"]["lamp"],
+                            buzzer=d["events"]["buzzer"]
+                            )
+                    if "time" in d:
+                        time = d["time"].split(":")
+                        ac.countdown_timer.time = datetime.timedelta(
+                                hours=int(time[0]),
+                                minutes=int(time[1]),
+                                seconds=int(time[2])
+                                )
+                    if "running" in d:
+                        if d["running"]:
+                            ac.countdown_timer.start()
+                        else:
+                            ac.countdown_timer.stop()
+                except Exception as e:
+                    raise AlarmClockMQTT.CommandError(
+                            f"{type(e).__name__}: {str(e)}")
+
+        def get_state(self, ac: AlarmClock):
+            info = ac.countdown_timer.get_all()
+            _LOGGER.debug(f"CountdownTimer state: {repr(info)}")
+            return json.dumps(info, cls=JSON_AlarmClock)
+
     class AlarmCommand(Command):
         """Read an alarm."""
 
@@ -244,6 +289,7 @@ class AlarmClockMQTT:
             'lamp': self.Switch('lamp'),
             'inhibit': self.Switch('inhibit'),
             'rtc': self.RTC(),
+            'timer': self.CountdownTimer(),
             'alarm': self.AlarmCommand(),
             'alarms': self.AlarmsCommand(),
             'alarm/write': self.WriteAlarmCommand(),
@@ -255,6 +301,7 @@ class AlarmClockMQTT:
             'lamp': self.COMMANDS['lamp'],
             'inhibit': self.COMMANDS['inhibit'],
             'rtc': self.COMMANDS['rtc'],
+            'timer': self.COMMANDS['timer'],
         }
 
         _LOGGER.info(f'err topic: {self._config.err_topic}')
