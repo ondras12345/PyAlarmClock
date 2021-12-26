@@ -5,7 +5,7 @@ import PyAlarmClock
 import argparse
 import sys
 import logging
-from tqdm import tqdm
+from tqdm import tqdm  # type: ignore
 
 
 def arg_auto_int(x):
