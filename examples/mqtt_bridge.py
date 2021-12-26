@@ -10,7 +10,7 @@ import datetime
 import time
 from enum import Enum
 from dataclasses import dataclass
-from typing import Union
+from typing import Union, Dict
 from getpass import getpass
 from PyAlarmClock import (AlarmClock, SerialAlarmClock, Alarm, AlarmEnabled,
                           Signalization, DaysOfWeek, TimeOfDay, Snooze)
@@ -283,25 +283,31 @@ class AlarmClockMQTT:
     def __init__(self, config: AlarmClockMQTTConfig):
         self._config = config
 
-        self.COMMANDS = {
+        ambient = self.DimmableLight('ambient')
+        lamp = self.Switch('lamp')
+        inhibit = self.Switch('inhibit')
+        rtc = self.RTC()
+        timer = self.CountdownTimer()
+
+        self.COMMANDS: Dict[str, AlarmClockMQTT.Command] = {
             # MQTT topic after "cmnd": function
-            'ambient': self.DimmableLight('ambient'),
-            'lamp': self.Switch('lamp'),
-            'inhibit': self.Switch('inhibit'),
-            'rtc': self.RTC(),
-            'timer': self.CountdownTimer(),
+            'ambient': ambient,
+            'lamp': lamp,
+            'inhibit': inhibit,
+            'rtc': rtc,
+            'timer': timer,
             'alarm': self.AlarmCommand(),
             'alarms': self.AlarmsCommand(),
             'alarm/write': self.WriteAlarmCommand(),
             'run_command': self.RunCommandCommand(),
         }
 
-        self.ENTITIES = {
-            'ambient': self.COMMANDS['ambient'],
-            'lamp': self.COMMANDS['lamp'],
-            'inhibit': self.COMMANDS['inhibit'],
-            'rtc': self.COMMANDS['rtc'],
-            'timer': self.COMMANDS['timer'],
+        self.ENTITIES: Dict[str, AlarmClockMQTT.Entity] = {
+            'ambient': ambient,
+            'lamp': lamp,
+            'inhibit': inhibit,
+            'rtc': rtc,
+            'timer': timer,
         }
 
         _LOGGER.info(f'err topic: {self._config.err_topic}')
