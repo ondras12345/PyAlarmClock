@@ -166,7 +166,11 @@ class AlarmClock:
         return alarms
 
     def write_alarm(self, index: int, value: Alarm) -> None:
-        """Write an alarm."""
+        """Write an alarm.
+
+        This does NOT make sure it is saved to the EEPROM. Use save_EEPROM for
+        that.
+        """
         if index < 0 or index >= self.number_of_alarms:
             raise ValueError(f'{index} is not a valid alarm index '
                              f'(0...{self.number_of_alarms})')
@@ -239,75 +243,79 @@ class AlarmClock:
         self.run_command(value.strftime('st%H:%M:%S'))
         self.run_command(value.strftime('sd%Y-%m-%d'))
 
+    class CountdownTimer:
+        @dataclass
+        class TimerInfo:
+            time: datetime.timedelta
+            running: bool
+            events: Signalization
+
+        def __init__(self, ac):
+            self.ac = ac
+
+        def __get_info(self):
+            out = self.ac.run_command('tmr')['timer']
+            self.__running = out['running']
+            time = out['time left'].split(':')
+            self.__time = datetime.timedelta(hours=int(time[0]),
+                                             minutes=int(time[1]),
+                                             seconds=int(time[2]))
+            self.__events = Signalization.from_dict(out)
+
+        def get_all(self):
+            """Get all info about the timer with a single command.
+
+            This is much faster than querying the individual properties
+            one by one.
+            """
+
+            self.__get_info()
+            return self.TimerInfo(time=self.__time,
+                                  running=self.__running,
+                                  events=self.__events)
+
+        @property
+        def time(self) -> datetime.timedelta:
+            self.__get_info()
+            return self.__time
+
+        @time.setter
+        def time(self, value: datetime.timedelta) -> None:
+            hours = value.seconds // 3600
+            minutes = (value.seconds // 60) % 60
+            seconds = value.seconds % 60
+            self.ac.run_command(f'tmr{hours}:{minutes}:{seconds}')
+
+        @property
+        def running(self) -> bool:
+            self.__get_info()
+            return self.__running
+
+        @running.setter
+        def running(self, value: bool) -> None:
+            self.ac.run_command(f'tmr-{"start" if value else "stop"}')
+
+        @property
+        def events(self) -> Signalization:
+            self.__get_info()
+            return self.__events
+
+        @events.setter
+        def events(self, value: Signalization) -> None:
+            ambient = value.ambient
+            lamp = int(value.lamp)
+            buzzer = int(value.buzzer)
+            self.ac.run_command(f'tme{ambient};{lamp};{buzzer}')
+
+        def start(self):
+            self.running = True
+
+        def stop(self):
+            self.running = False
+
     @property
     def countdown_timer(self):
-        class CountdownTimer:
-            def __get_info(otherself):
-                out = self.run_command('tmr')['timer']
-                otherself.__running = out['running']
-                time = out['time left'].split(':')
-                otherself.__time = datetime.timedelta(hours=int(time[0]),
-                                                      minutes=int(time[1]),
-                                                      seconds=int(time[2]))
-                otherself.__events = Signalization.from_dict(out)
-
-            def get_all(otherself):
-                """Get all info about the timer with a single command.
-
-                This is much faster than querying the individual properties
-                one by one.
-                """
-                @dataclass
-                class TimerInfo:
-                    time: datetime.timedelta
-                    running: bool
-                    events: Signalization
-
-                otherself.__get_info()
-                return TimerInfo(time=otherself.__time,
-                                 running=otherself.__running,
-                                 events=otherself.__events)
-
-            @property
-            def time(otherself) -> datetime.timedelta:
-                otherself.__get_info()
-                return otherself.__time
-
-            @time.setter
-            def time(otherself, value: datetime.timedelta) -> None:
-                hours = value.seconds // 3600
-                minutes = (value.seconds // 60) % 60
-                seconds = value.seconds % 60
-                self.run_command(f'tmr{hours}:{minutes}:{seconds}')
-
-            @property
-            def running(otherself) -> bool:
-                otherself.__get_info()
-                return otherself.__running
-
-            @running.setter
-            def running(otherself, value: bool) -> None:
-                self.run_command(f'tmr-{"start" if value else "stop"}')
-
-            @property
-            def events(otherself) -> Signalization:
-                otherself.__get_info()
-                return otherself.__events
-
-            @events.setter
-            def events(otherself, value: Signalization) -> None:
-                ambient = value.ambient
-                lamp = int(value.lamp)
-                buzzer = int(value.buzzer)
-                self.run_command(f'tme{ambient};{lamp};{buzzer}')
-
-            def start(otherself):
-                otherself.running = True
-
-            def stop(otherself):
-                otherself.running = False
-
-        return CountdownTimer()
+        return self.CountdownTimer(self)
 
     class EEPROMArray:
         # I cannot specify ac: AlarmClock because AlarmClock is not defined.
@@ -465,7 +473,7 @@ class SerialAlarmClock(AlarmClock):
 
             return value
 
-    def __init__(self, port, baudrate=9600):
+    def __init__(self, port: str, baudrate: int = 9600):
         """Initialize the object and establish serial communication."""
         self.__serial = self.Serial(port, baudrate)
         super().__init__()
@@ -524,3 +532,5 @@ class SerialAlarmClock(AlarmClock):
 # Warning: If you try to implement something like MQTTAlarmClock, keep in mind
 # that there might be hidden race conditions - e.g. you need to `sel` the
 # correct alarm before you `ls`.
+
+# TODO make everything json serializable
