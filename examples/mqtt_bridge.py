@@ -2,7 +2,6 @@
 
 """MQTT adapter for AlarmClock."""
 
-import sys
 import argparse
 import logging
 import json
@@ -320,6 +319,7 @@ class AlarmClockMQTT:
         This is a blocking call.
         """
         client = mqtt.Client()
+        client.on_disconnect = self._on_disconnect
         client.on_connect = self._on_connect
         client.on_message = self._on_message
         _LOGGER.info('Connecting to MQTT on '
@@ -349,11 +349,16 @@ class AlarmClockMQTT:
                                'offline', retain=True)
                 client.disconnect()
 
+    def _on_disconnect(self, client, userdata, rc):
+        if rc != 0:
+            _LOGGER.error(f"MQTT disconnected ({rc})")
+            _LOGGER.info("MQTT reconnecting")
+            client.reconnect()
+
     def _on_connect(self, client, userdata, flags, rc):
         _LOGGER.info(f'MQTT connected with result code {str(rc)}')
         if rc == 5:
-            _LOGGER.critical('Incorrect MQTT login credentials')
-            sys.exit(2)
+            raise Exception('Incorrect MQTT login credentials')
 
         client.publish(f'{self._config.state_topic}/available', 'online',
                        retain=True)
