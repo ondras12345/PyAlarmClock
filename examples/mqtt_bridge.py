@@ -224,9 +224,9 @@ class AlarmClockMQTT:
         def do_command(self, ac: AlarmClock, msg: str):
             try:
                 index = int(msg)
+                alarm = ac.read_alarm(index)
             except ValueError as e:
                 raise AlarmClockMQTT.CommandError(str(e))
-            alarm = ac.read_alarm(index)
             alarm_json = json.dumps(alarm, cls=JSON_AlarmClock)
             return (f'alarm{index}', alarm_json)
 
