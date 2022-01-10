@@ -151,7 +151,7 @@ class AlarmClock:
         """Read a single alarm."""
         if index < 0 or index >= self.number_of_alarms:
             raise ValueError(f'{index} is not a valid alarm index '
-                             f'(0...{self.number_of_alarms})')
+                             f'(0...{self.number_of_alarms-1})')
         self.run_command(f'sel{index}')
         return Alarm.from_dict(self.run_command('ls')[f'alarm{index}'])
 
@@ -173,7 +173,7 @@ class AlarmClock:
         """
         if index < 0 or index >= self.number_of_alarms:
             raise ValueError(f'{index} is not a valid alarm index '
-                             f'(0...{self.number_of_alarms})')
+                             f'(0...{self.number_of_alarms-1})')
         current = self.read_alarm(index)
         # read_alarm has already selected the correct alarm
         if current.enabled != value.enabled:
