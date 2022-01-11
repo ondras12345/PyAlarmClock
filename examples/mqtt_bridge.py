@@ -228,7 +228,7 @@ class AlarmClockMQTT:
             except ValueError as e:
                 raise AlarmClockMQTT.CommandError(str(e))
             alarm_json = json.dumps(alarm, cls=JSON_AlarmClock)
-            return (f'alarm{index}', alarm_json)
+            return (f'alarms/alarm{index}', alarm_json)
 
     class AlarmsCommand(Command):
         """Read all alarms at once, faster than reading one by one."""
@@ -239,7 +239,7 @@ class AlarmClockMQTT:
             ret = []
             for index, alarm in enumerate(alarms):
                 alarm_json = json.dumps(alarm, cls=JSON_AlarmClock)
-                ret.append((f'alarm{index}', alarm_json))
+                ret.append((f'alarms/alarm{index}', alarm_json))
             return ret
 
     class WriteAlarmCommand(Command):
