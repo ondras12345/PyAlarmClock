@@ -363,6 +363,9 @@ class AlarmClockMQTT:
         client.publish(f'{self._config.state_topic}/available', 'online',
                        retain=True)
 
+        client.publish(f'{self._config.state_topic}/number_of_alarms',
+                       self.ac.number_of_alarms, retain=True)
+
         # Subscribing in on_connect() means that if we lose the connection and
         # reconnect then subscriptions will be renewed.
         _LOGGER.debug(f'Subscribing to {self._config.command_topic}/#')
