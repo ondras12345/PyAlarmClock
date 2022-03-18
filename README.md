@@ -10,7 +10,7 @@ work-in-progress.
 
 ## Installation
 I recommend that you do this in a virtual environment.
-```
+```sh
 # standard installation
 pip3 install .
 
@@ -32,11 +32,13 @@ used e.g. by a home automation system like Home Assistant.
 You can either use command line arguments or a configuration file (or both, in
 which case arguments override what's set in the file).
 
-```
+```ini
 [MQTT]
 hostname = localhost
+port = 1883
 username = user
 password = pass
+topic = alarmclock
 
 [serial]
 device = /dev/ttyUSB0
@@ -55,7 +57,7 @@ Put a systemd unit file like this in `/etc/systemd/system/ac2mqtt.service`:
 (Path to the ac2mqtt command will depend on where you installed it.
 `which ac2mqtt` is your friend. I tend to put stuff like this in venvs under
 `/opt`.)
-```
+```ini
 [Unit]
 Description=Provide MQTT API for AlarmClock
 # mosquitto.service only if you run mosquitto broker on the same machine
@@ -75,7 +77,7 @@ WantedBy=multi-user.target
 ```
 
 Start the service:
-```
+```sh
 sudo systemctl daemon-reload
 sudo systemctl enable --now ac2mqtt.service
 ```

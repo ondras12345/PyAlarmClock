@@ -434,47 +434,54 @@ def main():
 
     defaults = dict()
     defaults['hostname'] = 'localhost'
-    parser.add_argument('--hostname', '-h', default=defaults['hostname'],
-                        help='MQTT broker host (default: %(default)s)')
+    parser.add_argument('--hostname', '-h', default=None,
+                        help=f"MQTT broker host (default: {defaults['hostname']})")
 
     defaults['port'] = 1883
-    parser.add_argument('--port', '-p', type=int, default=defaults['port'],
-                        help='MQTT broker port (default: %(default)d)')
+    parser.add_argument('--port', '-p', type=int, default=None,
+                        help=f"MQTT broker port (default: {defaults['port']})")
 
     defaults['topic'] = 'alarmclock'
-    parser.add_argument('--topic', '-t', default=defaults['topic'],
-                        help='MQTT topic prefix (default: %(default)s)')
+    parser.add_argument('--topic', '-t', default=None,
+                        help=f"MQTT topic prefix (default: {defaults['topic']})")
 
     defaults['username'] = None
-    parser.add_argument('--username', '-u', default=defaults['username'],
+    parser.add_argument('--username', '-u', default=None,
                         help='MQTT username (default: anonymous login)')
 
     defaults['password'] = None
-    parser.add_argument('--password', '-P', default=defaults['password'],
+    parser.add_argument('--password', '-P', default=None,
                         help='MQTT password (default: prompt for password)')
 
     parser.add_argument('--verbose', '-v', action='store_true',
                         help='log debug level messages')
 
     defaults['logfile'] = None
-    parser.add_argument('--logfile', default=defaults['logfile'],
+    parser.add_argument('--logfile', default=None,
                         help='File to output the log to. (default: stderr)')
 
     defaults['device'] = None
-    parser.add_argument('--device', type=str, default=defaults['device'],
+    parser.add_argument('--device', type=str, default=None,
                         help='serial port the device is attached to')
 
     defaults['baudrate'] = 9600
-    parser.add_argument('--baudrate', '-b', type=int,
-                        default=defaults['baudrate'],
+    parser.add_argument('--baudrate', '-b', type=int, default=None,
                         help='baudrate to be used with the serial port'
-                        ' (default: %(default)d)')
+                        f" (default: {defaults['baudrate']})")
 
     parser.add_argument('--config-file', '-c',
                         type=argparse.FileType('r'),
                         help='configuration file')
 
     args = parser.parse_args()
+
+    # Needed to determine if value from configuration file should be applied.
+    default_args = []
+
+    for arg in vars(args):
+        if getattr(args, arg) is None and arg in defaults:
+            setattr(args, arg, defaults[arg])
+            default_args.append(arg)
 
     # TODO all logging, not just _LOGGER
     level = logging.INFO
@@ -503,7 +510,7 @@ def main():
         _LOGGER.addHandler(handler)
 
     if args.config_file is not None:
-        _LOGGER.info(f'Reading config from {args.config_file}')
+        _LOGGER.info(f'Reading config from {args.config_file.name}')
         config = configparser.ConfigParser()
         config.read_file(args.config_file)
         _LOGGER.debug(f'Config sections: {config.sections()}')
@@ -512,18 +519,19 @@ def main():
             if opt in config[section]:
                 value = config[section][opt]
                 # do not override arguments
-                # TODO what if argument sets back to default?
-                if getattr(args, opt) == defaults[opt]:
+                if opt in default_args:
                     _LOGGER.debug(f'Setting from config file: {opt}')
                     setattr(args, opt, value)
 
         parseopt('MQTT', 'hostname')
         parseopt('MQTT', 'port')
+        args.port = int(args.port)
         parseopt('MQTT', 'username')
         parseopt('MQTT', 'password')
         parseopt('MQTT', 'topic')
         parseopt('serial', 'device')
         parseopt('serial', 'baudrate')
+        args.baudrate = int(args.baudrate)
 
     if args.device is None:
         _LOGGER.error("Device is not specified")
