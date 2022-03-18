@@ -3,10 +3,12 @@
 """MQTT adapter for AlarmClock."""
 
 import argparse
+import configparser
 import logging
 import json
 import datetime
 import time
+import sys
 from enum import Enum
 from dataclasses import dataclass
 from typing import Union, Dict
@@ -430,33 +432,47 @@ if __name__ == '__main__':
     parser.add_argument('--help', '-H', action='help',
                         help='show this help message and exit')
 
-    parser.add_argument('--hostname', '-h', default='localhost',
-                        help='MQTT broker host (default: %(default)s')
+    defaults = dict()
+    defaults['hostname'] = 'localhost'
+    parser.add_argument('--hostname', '-h', default=defaults['hostname'],
+                        help='MQTT broker host (default: %(default)s)')
 
-    parser.add_argument('--port', '-p', type=int, default=1883,
+    defaults['port'] = 1883
+    parser.add_argument('--port', '-p', type=int, default=defaults['port'],
                         help='MQTT broker port (default: %(default)d)')
 
-    parser.add_argument('--topic', '-t', default='alarmclock',
+    defaults['topic'] = 'alarmclock'
+    parser.add_argument('--topic', '-t', default=defaults['topic'],
                         help='MQTT topic prefix (default: %(default)s)')
 
-    parser.add_argument('--username', '-u', default=None,
+    defaults['username'] = None
+    parser.add_argument('--username', '-u', default=defaults['username'],
                         help='MQTT username (default: anonymous login)')
 
-    parser.add_argument('--password', '-P', default=None,
+    defaults['password'] = None
+    parser.add_argument('--password', '-P', default=defaults['password'],
                         help='MQTT password (default: prompt for password)')
 
     parser.add_argument('--verbose', '-v', action='store_true',
-                        help='Log debug level messages')
+                        help='log debug level messages')
 
-    parser.add_argument('--logfile', default=None,
+    defaults['logfile'] = None
+    parser.add_argument('--logfile', default=defaults['logfile'],
                         help='File to output the log to. (default: stderr)')
 
-    parser.add_argument('device',
-                        help='Serial port the device is attached to')
+    defaults['device'] = None
+    parser.add_argument('--device', type=str, default=defaults['device'],
+                        help='serial port the device is attached to')
 
-    parser.add_argument('--baudrate', '-b', type=int, default=9600,
+    defaults['baudrate'] = 9600
+    parser.add_argument('--baudrate', '-b', type=int, default=defaults['baudrate'],
                         help='baudrate to be used with the serial port'
                         ' (default: %(default)d)')
+
+    parser.add_argument('--config', '-c', dest='config_file',
+                        type=argparse.FileType('r'),
+                        help='configuration file')
+
 
     args = parser.parse_args()
 
@@ -484,6 +500,34 @@ if __name__ == '__main__':
         handler.setLevel(level)
         handler.setFormatter(formatter)
         _LOGGER.addHandler(handler)
+
+
+    if args.config_file is not None:
+        _LOGGER.info(f'Reading config from {args.config_file}')
+        config = configparser.ConfigParser()
+        config.read_file(args.config_file)
+        _LOGGER.debug(f'Config sections: {config.sections()}')
+        def parseopt(section, opt):
+            if opt in config[section]:
+                value = config[section][opt]
+                # do not override arguments
+                if getattr(args, opt) == defaults[opt]:
+                    _LOGGER.debug(f'Setting from config file: {opt}')
+                    setattr(args, opt, value)
+
+        parseopt('MQTT', 'hostname')
+        parseopt('MQTT', 'port')
+        parseopt('MQTT', 'username')
+        parseopt('MQTT', 'password')
+        parseopt('MQTT', 'topic')
+        parseopt('serial', 'device')
+        parseopt('serial', 'baudrate')
+
+
+    if args.device is None:
+        _LOGGER.error("Device is not specified")
+        sys.exit(1)
+
 
     password = args.password
     if args.username is not None and password is None:
