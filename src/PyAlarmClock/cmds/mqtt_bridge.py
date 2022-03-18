@@ -423,7 +423,7 @@ class AlarmClockMQTT:
             client.publish(self._config.err_topic, text)
 
 
-if __name__ == '__main__':
+def main():
     # add_help=False avoids conflict with -h for hostname
     parser = argparse.ArgumentParser(
             add_help=False,
@@ -465,17 +465,18 @@ if __name__ == '__main__':
                         help='serial port the device is attached to')
 
     defaults['baudrate'] = 9600
-    parser.add_argument('--baudrate', '-b', type=int, default=defaults['baudrate'],
+    parser.add_argument('--baudrate', '-b', type=int,
+                        default=defaults['baudrate'],
                         help='baudrate to be used with the serial port'
                         ' (default: %(default)d)')
 
-    parser.add_argument('--config', '-c', dest='config_file',
+    parser.add_argument('--config-file', '-c',
                         type=argparse.FileType('r'),
                         help='configuration file')
 
-
     args = parser.parse_args()
 
+    # TODO all logging, not just _LOGGER
     level = logging.INFO
     if args.verbose:
         level = logging.DEBUG
@@ -501,16 +502,17 @@ if __name__ == '__main__':
         handler.setFormatter(formatter)
         _LOGGER.addHandler(handler)
 
-
     if args.config_file is not None:
         _LOGGER.info(f'Reading config from {args.config_file}')
         config = configparser.ConfigParser()
         config.read_file(args.config_file)
         _LOGGER.debug(f'Config sections: {config.sections()}')
+
         def parseopt(section, opt):
             if opt in config[section]:
                 value = config[section][opt]
                 # do not override arguments
+                # TODO what if argument sets back to default?
                 if getattr(args, opt) == defaults[opt]:
                     _LOGGER.debug(f'Setting from config file: {opt}')
                     setattr(args, opt, value)
@@ -523,11 +525,9 @@ if __name__ == '__main__':
         parseopt('serial', 'device')
         parseopt('serial', 'baudrate')
 
-
     if args.device is None:
         _LOGGER.error("Device is not specified")
-        sys.exit(1)
-
+        sys.exit(255)
 
     password = args.password
     if args.username is not None and password is None:
@@ -543,3 +543,9 @@ if __name__ == '__main__':
             )
     ac_mqtt = AlarmClockMQTT(config)
     ac_mqtt.loop_forever()
+
+    # TODO retain hardware status messages ??
+
+
+if __name__ == '__main__':
+    main()

@@ -13,7 +13,7 @@ def arg_auto_int(x):
     return int(x, 0)
 
 
-if __name__ == '__main__':
+def main():
     parser = argparse.ArgumentParser()
 
     parser.add_argument('device',
@@ -62,3 +62,7 @@ if __name__ == '__main__':
             data = args.file.read()
             for address, byte in enumerate(tqdm(data)):
                 ac.EEPROM[args.address + address] = byte
+
+
+if __name__ == '__main__':
+    main()

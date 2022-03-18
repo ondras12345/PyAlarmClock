@@ -79,6 +79,4 @@ class TestDaysOfWeek(unittest.TestCase):
 
 
 if __name__ == '__main__':
-    # This is not useful because the PyAlarmClock module will not be
-    # found if executed directly.
     unittest.main()
