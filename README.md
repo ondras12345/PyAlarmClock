@@ -58,16 +58,17 @@ Put a systemd unit file like this in `/etc/systemd/system/ac2mqtt.service`:
 ```
 [Unit]
 Description=Provide MQTT API for AlarmClock
-# only use this if you run mosquitto broker on the same machine
-After=mosquitto.service
+# mosquitto.service only if you run mosquitto broker on the same machine
+# dev-ttyUSB0 is just an example, adjust for your real device
+After=mosquitto.service dev-ttyUSB0.device
 
 [Service]
 # User to run the service as instead of root.
 User=homeassistant
 ExecStart=/path/to/ac2mqtt -c /etc/ac2mqtt.conf
 Restart=on-failure
+RestartSec=30s
 RestartPreventExitStatus=255
-Type=simple
 
 [Install]
 WantedBy=multi-user.target
