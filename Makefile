@@ -11,12 +11,12 @@ test:           ## Run unit tests.
 
 .PHONY: test_hardware
 test_hardware:  ## Run integration tests that require hardware to be connected.
-	python3 -m unittest discover -s tests/integration
+	python3 -m unittest discover -s tests/integration/hardware
 
 .PHONY: lint
 lint:           ## Run various linters.
 	-flake8
-	-mypy src/PyAlarmClock/*.py tests/unit/test_*.py tests/integration/test_*.py src/examples/*.py
+	-mypy
 
 .PHONY: bandit
 bandit:         ## Run the bandit security linter.
