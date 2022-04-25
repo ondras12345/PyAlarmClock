@@ -78,10 +78,10 @@ class AlarmClockMQTT:
             raise NotImplementedError()
 
     class CommandError(Exception):
-        """Error raised by a MQTT command handler."""
+        """Error raised by an MQTT command handler."""
 
     class Command:
-        """Representation of a MQTT command handler."""
+        """Representation of an MQTT command handler."""
 
         def do_command(self, ac: AlarmClock, msg: str):
             """Handle reception of msg.
@@ -427,7 +427,7 @@ def main():
     # add_help=False avoids conflict with -h for hostname
     parser = argparse.ArgumentParser(
             add_help=False,
-            description='A MQTT bridge for PyAlarmClock')
+            description='An MQTT bridge for PyAlarmClock')
 
     parser.add_argument('--help', '-H', action='help',
                         help='show this help message and exit')
