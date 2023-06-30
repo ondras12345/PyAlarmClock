@@ -11,7 +11,7 @@ import time
 import sys
 from enum import Enum
 from dataclasses import dataclass
-from typing import Union, Dict
+from typing import Union, Optional, Dict, Tuple, List
 from getpass import getpass
 from PyAlarmClock import (AlarmClock, SerialAlarmClock, Alarm, AlarmEnabled,
                           Signalization, DaysOfWeek, TimeOfDay, Snooze)
@@ -29,6 +29,8 @@ def remove_prefix(text, prefix):
 
 
 class JSON_AlarmClock(json.JSONEncoder):
+    """JSON encoder for PyAlarmClock objects."""
+
     def default(self, obj):
         if isinstance(obj, Enum):
             return obj.name
@@ -50,7 +52,7 @@ class JSON_AlarmClock(json.JSONEncoder):
 class AlarmClockMQTTConfig:
     """Configuration of AlarmClockMQTT adapter."""
 
-    # Attributes without a default cannot follow attributes with one
+    # Attributes without a default must be specified first
     device: str
     hostname: str
     port: int
@@ -58,7 +60,7 @@ class AlarmClockMQTTConfig:
     err_topic: str
     state_topic: str
     command_topic: str
-    username: Union[str, None] = None
+    username: Optional[str] = None
     password: str = ""
     baudrate: int = 9600
 
@@ -69,7 +71,7 @@ class AlarmClockMQTT:
     class Entity:
         """Representation of an AlarmClock attribute with a pollable state."""
 
-        def get_state(self, ac: AlarmClock):
+        def get_state(self, ac: AlarmClock) -> str:
             """Get state of the entity.
 
             Returns a result that should be published in the entity's
@@ -83,7 +85,9 @@ class AlarmClockMQTT:
     class Command:
         """Representation of an MQTT command handler."""
 
-        def do_command(self, ac: AlarmClock, msg: str):
+        def do_command(
+            self, ac: AlarmClock, msg: str
+        ) -> Union[None, str, Tuple[str, str], List]:
             """Handle reception of msg.
 
             The return value (if not None) of this function will be published
@@ -100,17 +104,17 @@ class AlarmClockMQTT:
     class Switch(Entity, Command):
         """A switch that can either be OFF or ON.
 
-        e.g. lamp, inhibit
+        E.g. lamp, inhibit
         """
 
         def __init__(self, name: str):
             """Initialize a switch.
 
-            name must be a valid name of a AlarmClock attribute.
+            name must be a valid name of an AlarmClock attribute.
             """
             self.name = name
 
-        def do_command(self, ac: AlarmClock, msg: str):
+        def do_command(self, ac: AlarmClock, msg: str) -> str:
             messages = {
                 'ON': lambda ac: self.turn_on(ac),
                 'OFF': lambda ac: self.turn_off(ac),
@@ -131,7 +135,7 @@ class AlarmClockMQTT:
         def turn_off(self, ac: AlarmClock):
             setattr(ac, self.name, False)
 
-        def get_state(self, ac: AlarmClock):
+        def get_state(self, ac: AlarmClock) -> str:
             value = getattr(ac, self.name)
             value = 'ON' if value else 'OFF'
             return value
@@ -159,8 +163,8 @@ class AlarmClockMQTT:
         def turn_off(self, ac: AlarmClock):
             setattr(ac, self.name, 0)
 
-        def get_state(self, ac: AlarmClock):
-            return getattr(ac, self.name)
+        def get_state(self, ac: AlarmClock) -> str:
+            return str(getattr(ac, self.name))
 
     class RTC(Command, Entity):
         """Real time clock."""
@@ -174,7 +178,7 @@ class AlarmClockMQTT:
                 raise AlarmClockMQTT.CommandError(
                         f"{type(e).__name__}: {str(e)}")
 
-        def get_state(self, ac: AlarmClock):
+        def get_state(self, ac: AlarmClock) -> str:
             return ac.RTC_time.astimezone().isoformat(timespec="seconds")
 
     class CountdownTimer(Command, Entity):
@@ -215,7 +219,7 @@ class AlarmClockMQTT:
                     raise AlarmClockMQTT.CommandError(
                             f"{type(e).__name__}: {str(e)}")
 
-        def get_state(self, ac: AlarmClock):
+        def get_state(self, ac: AlarmClock) -> str:
             info = ac.countdown_timer.get_all()
             _LOGGER.debug(f"CountdownTimer state: {repr(info)}")
             return json.dumps(info, cls=JSON_AlarmClock)
@@ -223,7 +227,7 @@ class AlarmClockMQTT:
     class AlarmCommand(Command):
         """Read an alarm."""
 
-        def do_command(self, ac: AlarmClock, msg: str):
+        def do_command(self, ac: AlarmClock, msg: str) -> Tuple[str, str]:
             try:
                 index = int(msg)
                 alarm = ac.read_alarm(index)
@@ -235,7 +239,9 @@ class AlarmClockMQTT:
     class AlarmsCommand(Command):
         """Read all alarms at once, faster than reading one by one."""
 
-        def do_command(self, ac: AlarmClock, msg: str):
+        def do_command(
+            self, ac: AlarmClock, msg: str
+        ) -> List[Tuple[str, str]]:
             alarms = ac.read_alarms()
 
             ret = []
@@ -274,7 +280,7 @@ class AlarmClockMQTT:
     class RunCommandCommand(Command):
         """Run a CLI command, parse it's YAML output and return it as JSON."""
 
-        def do_command(self, ac: AlarmClock, msg: str):
+        def do_command(self, ac: AlarmClock, msg: str) -> str:
             try:
                 return json.dumps(ac.run_command(msg), default=str)
             except Exception as e:
