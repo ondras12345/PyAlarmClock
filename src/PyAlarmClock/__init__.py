@@ -142,6 +142,7 @@ class AlarmClock:
         a = self.run_command('ver')['ver']
         self.number_of_alarms = a['number of alarms']
         self.build_time = a['build time']
+        self.alarmclock_version = a.get('version', None)
 
     def run_command(self, command: str):
         """Send a command, parse it's YAML output and return the result."""
