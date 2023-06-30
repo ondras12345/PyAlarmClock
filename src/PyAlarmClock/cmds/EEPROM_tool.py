@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Do various operations with the alarm clock's EEPROM."""
+"""Perform various operations with the alarm clock's EEPROM."""
 
 import PyAlarmClock
 import argparse
