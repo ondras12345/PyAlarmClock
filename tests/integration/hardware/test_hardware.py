@@ -126,9 +126,9 @@ class TestConfiguration(unittest.TestCase):
 
         time.sleep(5)
 
-        # TODO this will not work, ambient start dimming be enabled 15 minutes
-        # before the alarm triggers.
-        #self.assertEqual(self.ac.ambient, 120)
+        # Ambient starts dimming 15 minutes before the alarm is triggered, but
+        # we skipped that part, so it won't be on.
+        # self.assertEqual(self.ac.ambient, 120)
 
         self.assertEqual(self.ac.lamp, True)
 
