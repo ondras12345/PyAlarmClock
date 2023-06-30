@@ -180,7 +180,7 @@ class CountdownTimer(Command, Entity):
         else:
             try:
                 d = json.loads(msg)
-                _LOGGER.debug(f"Got json: {repr(d)}")
+                _LOGGER.debug("Got json: %r", d)
                 if "events" in d:
                     ac.countdown_timer.events = Signalization(
                         ambient=d["events"]["ambient"],
@@ -204,7 +204,7 @@ class CountdownTimer(Command, Entity):
 
     def get_state(self, ac: AlarmClock) -> str:
         info = ac.countdown_timer.get_all()
-        _LOGGER.debug(f"CountdownTimer state: {repr(info)}")
+        _LOGGER.debug("CountdownTimer state: %r", info)
         return json.dumps(info, cls=JSON_AlarmClock)
 
 
@@ -240,7 +240,7 @@ class WriteAlarmCommand(Command):
     def do_command(self, ac: AlarmClock, msg: str):
         try:
             d = json.loads(msg)
-            _LOGGER.debug(f"Got json: {repr(d)}")
+            _LOGGER.debug("Got json: %r", d)
             index = int(d["index"])
             alarm = Alarm(
                 enabled=AlarmEnabled[d["enabled"]],
@@ -392,7 +392,7 @@ class AlarmClockMQTT:
             self._report_state(client, entity_id)
 
     def _on_message(self, client, userdata, msg) -> None:
-        _LOGGER.debug(f'{msg.topic}: {str(msg.payload)}')
+        _LOGGER.debug('%s: %s', msg.topic, msg.payload)
 
         if self._config.command_topic in msg.topic:
             command_id = remove_prefix(msg.topic,
@@ -550,14 +550,14 @@ def main():
         _LOGGER.info(f'Reading config from {args.config_file.name}')
         config = configparser.ConfigParser()
         config.read_file(args.config_file)
-        _LOGGER.debug(f'Config sections: {config.sections()}')
+        _LOGGER.debug('Config sections: %r', config.sections())
 
         def parseopt(section, opt):
             if opt in config[section]:
                 value = config[section][opt]
                 # do not override arguments
                 if opt in default_args:
-                    _LOGGER.debug(f'Setting from config file: {opt}')
+                    _LOGGER.debug('Setting from config file: %s', opt)
                     setattr(args, opt, value)
 
         parseopt('MQTT', 'hostname')
