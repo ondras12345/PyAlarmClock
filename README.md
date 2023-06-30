@@ -4,9 +4,6 @@ a serial port.
 
 Requires AlarmClock version >=0.5.0.
 
-**WARNING**: This is a really early development version and still a
-work-in-progress.
-
 
 ## Installation
 I recommend that you do this in a virtual environment.
