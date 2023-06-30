@@ -429,49 +429,71 @@ def main():
             add_help=False,
             description='An MQTT bridge for PyAlarmClock')
 
-    parser.add_argument('--help', '-H', action='help',
-                        help='show this help message and exit')
+    parser.add_argument(
+        '--help', '-H', action='help',
+        help='show this help message and exit'
+    )
 
     defaults = dict()
     defaults['hostname'] = 'localhost'
-    parser.add_argument('--hostname', '-h', default=None,
-                        help=f"MQTT broker host (default: {defaults['hostname']})")
+    parser.add_argument(
+        '--hostname', '-h', default=None,
+        help=f"MQTT broker host (default: {defaults['hostname']})"
+    )
 
     defaults['port'] = 1883
-    parser.add_argument('--port', '-p', type=int, default=None,
-                        help=f"MQTT broker port (default: {defaults['port']})")
+    parser.add_argument(
+        '--port', '-p', type=int, default=None,
+        help=f"MQTT broker port (default: {defaults['port']})"
+    )
 
     defaults['topic'] = 'alarmclock'
-    parser.add_argument('--topic', '-t', default=None,
-                        help=f"MQTT topic prefix (default: {defaults['topic']})")
+    parser.add_argument(
+        '--topic', '-t', default=None,
+        help=f"MQTT topic prefix (default: {defaults['topic']})"
+    )
 
     defaults['username'] = None
-    parser.add_argument('--username', '-u', default=None,
-                        help='MQTT username (default: anonymous login)')
+    parser.add_argument(
+        '--username', '-u', default=None,
+        help='MQTT username (default: anonymous login)'
+    )
 
     defaults['password'] = None
-    parser.add_argument('--password', '-P', default=None,
-                        help='MQTT password (default: prompt for password)')
+    parser.add_argument(
+        '--password', '-P', default=None,
+        help='MQTT password (default: prompt for password)'
+    )
 
-    parser.add_argument('--verbose', '-v', action='store_true',
-                        help='log debug level messages')
+    parser.add_argument(
+        '--verbose', '-v', action='store_true',
+        help='log debug level messages'
+    )
 
     defaults['logfile'] = None
-    parser.add_argument('--logfile', default=None,
-                        help='File to output the log to. (default: stderr)')
+    parser.add_argument(
+        '--logfile', default=None,
+        help='File to output the log to. (default: stderr)'
+    )
 
     defaults['device'] = None
-    parser.add_argument('--device', type=str, default=None,
-                        help='serial port the device is attached to')
+    parser.add_argument(
+        '--device', type=str, default=None,
+        help='serial port the device is attached to'
+    )
 
     defaults['baudrate'] = 9600
-    parser.add_argument('--baudrate', '-b', type=int, default=None,
-                        help='baudrate to be used with the serial port'
-                        f" (default: {defaults['baudrate']})")
+    parser.add_argument(
+        '--baudrate', '-b', type=int, default=None,
+        help="baudrate to be used with the serial port"
+             f" (default: {defaults['baudrate']})"
+    )
 
-    parser.add_argument('--config-file', '-c',
-                        type=argparse.FileType('r'),
-                        help='configuration file')
+    parser.add_argument(
+        '--config-file', '-c',
+        type=argparse.FileType('r'),
+        help='configuration file'
+    )
 
     args = parser.parse_args()
 
