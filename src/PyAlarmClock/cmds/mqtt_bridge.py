@@ -50,6 +50,8 @@ class JSON_AlarmClock(json.JSONEncoder):
 class Entity:
     """Representation of an AlarmClock attribute with a pollable state."""
 
+    retain: bool = False
+
     def get_state(self, ac: AlarmClock) -> str:
         """Get state of the entity.
 
@@ -73,6 +75,9 @@ class Command:
 
         The return value (if not None) of this function will be published
         in the corresponding state_topic.
+        If a corresponding entity exists and it has retain=True, the message
+        will be published with the retain flag set. This only applies to
+        single str return values.
 
         If a tuple is returned, the first value in the tuple is a topic
         under state_topic where the second value should be published.
@@ -89,12 +94,13 @@ class Switch(Entity, Command):
     E.g. lamp, inhibit
     """
 
-    def __init__(self, name: str):
+    def __init__(self, name: str, retain: bool = False):
         """Initialize a switch.
 
         name must be a valid name of an AlarmClock attribute.
         """
         self.name = name
+        self.retain = retain
 
     def do_command(self, ac: AlarmClock, msg: str) -> str:
         messages = {
@@ -126,8 +132,8 @@ class Switch(Entity, Command):
 class DimmableLight(Switch):
     """A dimmable light."""
 
-    def __init__(self, name: str):
-        super().__init__(name)
+    def __init__(self, name: str, retain: bool = False):
+        super().__init__(name, retain=retain)
 
     def do_command(self, ac: AlarmClock, msg: str):
         try:
@@ -294,9 +300,9 @@ class AlarmClockMQTT:
     def __init__(self, config: AlarmClockMQTTConfig):
         self._config = config
 
-        ambient = DimmableLight('ambient')
-        lamp = Switch('lamp')
-        inhibit = Switch('inhibit')
+        ambient = DimmableLight('ambient', retain=True)
+        lamp = Switch('lamp', retain=True)
+        inhibit = Switch('inhibit', retain=True)
         rtc = RTC()
         timer = CountdownTimer()
 
@@ -407,8 +413,12 @@ class AlarmClockMQTT:
                 self._error(client, f'Bad topic for command: {msg.topic}')
 
     def _report_state(self, client: mqtt.Client, entity_id: str) -> None:
-        client.publish(f'{self._config.state_topic}/{entity_id}',
-                       self.ENTITIES[entity_id].get_state(self.ac))
+        entity = self.ENTITIES[entity_id]
+        client.publish(
+            f'{self._config.state_topic}/{entity_id}',
+            entity.get_state(self.ac),
+            retain=entity.retain
+        )
 
     def _execute_command(self, client: mqtt.Client, command_name: str,
                          msg: str) -> None:
@@ -426,9 +436,13 @@ class AlarmClockMQTT:
                         message
                     )
                 else:
+                    retain = False
+                    if command_name in self.ENTITIES:
+                        retain = self.ENTITIES[command_name].retain
+
                     client.publish(
                         f'{self._config.state_topic}/{command_name}',
-                        value
+                        value, retain=retain
                     )
         except CommandError as e:
             details = '\n' + str(e) if str(e) != '' else ''
@@ -588,8 +602,6 @@ def main():
             )
     ac_mqtt = AlarmClockMQTT(config)
     ac_mqtt.loop_forever()
-
-    # TODO retain hardware status messages ??
 
 
 if __name__ == '__main__':
