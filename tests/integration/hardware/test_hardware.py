@@ -66,6 +66,7 @@ class TestConfiguration(unittest.TestCase):
         self.assertFalse(self.ac.state_changed())
         self.ac.lamp = True
         self.assertEqual(self.ac.lamp, True)
+        time.sleep(0.55)  # state_changed is debounced
         self.assertTrue(self.ac.state_changed())
         self.assertFalse(self.ac.state_changed())
         self.ac.lamp = False
