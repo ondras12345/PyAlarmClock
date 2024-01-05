@@ -1,7 +1,7 @@
 import datetime
 from typing import List
 from dataclasses import dataclass
-from ..dataclasses import Signalization, Alarm
+from ..dataclasses import Signalization, Alarm, AlarmClockStatus
 from ..const import EEPROM_SIZE
 
 
@@ -75,6 +75,15 @@ class AlarmClock:
         This can raise 'UselessSave' error.
         """
         self.run_command('sav')
+
+    def button_stop(self) -> None:
+        """Stop all active alarms and the timer.
+
+        This is the same as pressing the physical stop button,
+        except it works even when the display backlight is off
+        and does not turn display backlight on.
+        """
+        self.run_command('stop')
 
     @property
     def lamp(self) -> bool:
@@ -213,6 +222,11 @@ class AlarmClock:
     def EEPROM(self):
         """Direct read/write access to the EEPROM."""
         return self.EEPROMArray(self)
+
+    @property
+    def status(self):
+        """Get (read) a status object."""
+        return AlarmClockStatus.from_dict(self.run_command('status'))
 
 
 # TODO make everything json serializable

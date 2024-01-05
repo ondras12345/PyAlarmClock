@@ -28,3 +28,10 @@ class AlarmEnabled(Enum):
     SGL = 1
     RPT = 2
     SKP = 3
+
+
+class DisplayBacklightStatus(Enum):
+    """An enumeration of all possible display backlight levels."""
+    OFF = 0
+    DIM = 1
+    BRIGHT = 2
