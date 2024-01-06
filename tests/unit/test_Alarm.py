@@ -101,6 +101,18 @@ class TestAlarm(unittest.TestCase):
             datetime.fromisoformat('2024-01-06T13:01:00')
         )
 
+        dt = datetime.fromisoformat('2024-01-06T13:00:59')
+        self.assertEqual(
+            a.get_next_alarm_time(dt),
+            datetime.fromisoformat('2024-01-06T13:01:00')
+        )
+
+        dt = datetime.fromisoformat('2024-01-06T13:01:00')
+        self.assertEqual(
+            a.get_next_alarm_time(dt),
+            datetime.fromisoformat('2024-01-13T13:01:00')
+        )
+
     def test_next_alarm_time_next_week(self):
         d = {
             'enabled': 'RPT',

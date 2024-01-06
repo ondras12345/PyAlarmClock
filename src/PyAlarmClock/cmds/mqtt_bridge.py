@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """MQTT adapter for AlarmClock."""
 
+# TODO https://github.com/unixorn/ha-mqtt-discoverable
+
 import argparse
 import configparser
 import logging
@@ -195,7 +197,12 @@ class AlarmCommand(Command):
             alarm = ac.read_alarm(index)
         except ValueError as e:
             raise CommandError(repr(e))
-        alarm_json = json.dumps(alarm, cls=JSON_AlarmClock)
+        now = datetime.datetime.now()
+        alarm_dict = {
+            **alarm.__dict__,
+            'next_alarm_time': alarm.get_next_alarm_time(now)
+        }
+        alarm_json = json.dumps(alarm_dict, cls=JSON_AlarmClock)
         return (f'alarms/alarm{index}', alarm_json)
 
 
@@ -206,13 +213,29 @@ class AlarmsCommand(Command):
     # so it should be safe to use retain=True.
     retain = True
 
-    def do_command(self, ac: AlarmClock, msg: str) -> List[Tuple[str, str]]:
-        alarms = ac.read_alarms()
+    next_update = None
 
+    def do_command(self, ac: AlarmClock, msg: str) -> List[Tuple[str, str]]:
+        self.alarms = ac.read_alarms()
+        return self.send_update()
+
+    def send_update(self) -> List[Tuple[str, str]]:
         ret = []
-        for index, alarm in enumerate(alarms):
-            alarm_json = json.dumps(alarm, cls=JSON_AlarmClock)
+        now = datetime.datetime.now()
+        next_alarm_times = [a.get_next_alarm_time(now) for a in self.alarms]
+        for index, alarm in enumerate(self.alarms):
+            alarm_dict = {
+                **alarm.__dict__,
+                'next_alarm_time': next_alarm_times[index]
+            }
+            alarm_json = json.dumps(alarm_dict, cls=JSON_AlarmClock)
             ret.append((f'alarms/alarm{index}', alarm_json))
+
+            valid_dts = [dt for dt in next_alarm_times if dt is not None]
+            if len(valid_dts) == 0:
+                self.next_update = None
+            else:
+                self.next_update = min(valid_dts)
         return ret
 
 
@@ -335,11 +358,25 @@ class AlarmClockMQTT:
                               self._config.baudrate) as self.ac:
             try:
                 while True:
+                    # TODO use client.loop_start() (loop in a new thread) ??
                     client.loop_read()
                     client.loop_write()
                     client.loop_misc()
+
                     if self.ac.state_changed():
                         self._report_status(client)
+
+                    # keep next_alarm_time updated
+                    now = datetime.datetime.now()
+                    alarms_command = self.COMMANDS['alarms']
+                    next_update = alarms_command.next_update
+                    if next_update is not None and now > next_update:
+                        self._publish_command_response(
+                            client,
+                            'alarms',
+                            alarms_command.send_update()
+                        )
+
                     time.sleep(0.1)
             except KeyboardInterrupt:
                 client.publish(f'{self._config.state_topic}/available',
@@ -411,30 +448,34 @@ class AlarmClockMQTT:
 
     def _execute_command(self, client: mqtt.Client, command_name: str,
                          msg: str) -> None:
+        command = self.COMMANDS[command_name]
         try:
-            command = self.COMMANDS[command_name]
             ret = command.do_command(self.ac, msg)
-            if ret is None:
-                return
-            if not isinstance(ret, list):
-                ret = [ret]
-            for value in ret:
-                if isinstance(value, tuple):
-                    topic, message = value
-                else:
-                    topic, message = command_name, value
-
-                client.publish(
-                    f'{self._config.state_topic}/{topic}',
-                    message, retain=command.retain
-                )
         except CommandError as e:
             details = '\n' + str(e) if str(e) != '' else ''
             self._error(
                 client,
                 f'Bad payload for '
-                f'{self._config.command_topic}/{command_name}:'
-                f' {msg}{details}'
+                f'{self._config.command_topic}/{command_name}: {msg}{details}'
+            )
+        self._publish_command_response(client, command_name, ret)
+
+    def _publish_command_response(self, client: mqtt.Client,
+                                  command_name: str, ret) -> None:
+        command = self.COMMANDS[command_name]
+        if ret is None:
+            return
+        if not isinstance(ret, list):
+            ret = [ret]
+        for value in ret:
+            if isinstance(value, tuple):
+                topic, message = value
+            else:
+                topic, message = command_name, value
+
+            client.publish(
+                f'{self._config.state_topic}/{topic}',
+                message, retain=command.retain
             )
 
 
