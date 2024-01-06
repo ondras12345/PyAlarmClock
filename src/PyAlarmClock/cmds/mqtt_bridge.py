@@ -9,6 +9,7 @@ import datetime
 import time
 import sys
 from enum import Enum
+import dataclasses
 from dataclasses import dataclass
 from typing import Union, Optional, Dict, Tuple, List
 from getpass import getpass
@@ -34,9 +35,7 @@ class JSON_AlarmClock(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, Enum):
             return obj.name
-        if (isinstance(obj, Snooze) or isinstance(obj, Signalization) or
-                isinstance(obj, Alarm) or isinstance(obj, TimeOfDay) or
-                isinstance(obj, AlarmClock.CountdownTimer.TimerInfo)):
+        if dataclasses.is_dataclass(obj):
             return obj.__dict__
         if isinstance(obj, DaysOfWeek):
             return obj.active_days  # TODO also return code ??
@@ -44,22 +43,6 @@ class JSON_AlarmClock(json.JSONEncoder):
                 isinstance(obj, datetime.timedelta)):
             return str(obj)
         return super().default(obj)
-
-
-class Entity:
-    """Representation of an AlarmClock attribute with a pollable state.
-
-    Only used for attributes which have to be polled manually
-    and thus aren't sent as retained messages.
-    """
-
-    def get_state(self, ac: AlarmClock) -> str:
-        """Get state of the entity.
-
-        Returns a result that should be published in the entity's
-        state_topic.
-        """
-        raise NotImplementedError()
 
 
 class CommandError(Exception):
@@ -133,7 +116,7 @@ class DimmableLight(Switch):
             try:
                 setattr(ac, self.name, int(msg))
             except ValueError as e:
-                raise CommandError(str(e))
+                raise CommandError(repr(e))
 
     def turn_on(self, ac: AlarmClock):
         setattr(ac, self.name, 255)
@@ -142,22 +125,22 @@ class DimmableLight(Switch):
         setattr(ac, self.name, 0)
 
 
-class RTC(Command, Entity):
+class RTC(Command):
     """Real time clock."""
 
     def do_command(self, ac: AlarmClock, msg: str):
-        if msg == "" or msg == "?":
+        if msg in ("", "?"):
             return self.get_state(ac)
         try:
             ac.RTC_time = datetime.datetime.fromisoformat(msg)
         except Exception as e:
-            raise CommandError(f"{type(e).__name__}: {str(e)}")
+            raise CommandError(repr(e))
 
     def get_state(self, ac: AlarmClock) -> str:
         return ac.RTC_time.astimezone().isoformat(timespec="seconds")
 
 
-class CountdownTimer(Command, Entity):
+class CountdownTimer(Command):
     def do_command(self, ac: AlarmClock, msg: str):
         messages = {
             'START': ac.countdown_timer.start,
@@ -169,30 +152,30 @@ class CountdownTimer(Command, Entity):
         if msg.upper() in messages:
             messages[msg.upper()]()
             return self.get_state(ac)
-        else:
-            try:
-                d = json.loads(msg)
-                _LOGGER.debug("Got json: %r", d)
-                if "events" in d:
-                    ac.countdown_timer.events = Signalization(
-                        ambient=d["events"]["ambient"],
-                        lamp=d["events"]["lamp"],
-                        buzzer=d["events"]["buzzer"]
-                        )
-                if "time" in d:
-                    time = d["time"].split(":")
-                    ac.countdown_timer.time = datetime.timedelta(
-                            hours=int(time[0]),
-                            minutes=int(time[1]),
-                            seconds=int(time[2])
-                            )
-                if "running" in d:
-                    if d["running"]:
-                        ac.countdown_timer.start()
-                    else:
-                        ac.countdown_timer.stop()
-            except Exception as e:
-                raise CommandError(f"{type(e).__name__}: {str(e)}")
+
+        try:
+            d = json.loads(msg)
+            _LOGGER.debug("Got json: %r", d)
+            if "events" in d:
+                ac.countdown_timer.events = Signalization(
+                    ambient=d["events"]["ambient"],
+                    lamp=d["events"]["lamp"],
+                    buzzer=d["events"]["buzzer"]
+                )
+            if "time" in d:
+                time = d["time"].split(":")
+                ac.countdown_timer.time = datetime.timedelta(
+                    hours=int(time[0]),
+                    minutes=int(time[1]),
+                    seconds=int(time[2])
+                )
+            if "running" in d:
+                if d["running"]:
+                    ac.countdown_timer.start()
+                else:
+                    ac.countdown_timer.stop()
+        except Exception as e:
+            raise CommandError(repr(e))
 
     def get_state(self, ac: AlarmClock) -> str:
         info = ac.countdown_timer.get_all()
@@ -208,7 +191,7 @@ class AlarmCommand(Command):
             index = int(msg)
             alarm = ac.read_alarm(index)
         except ValueError as e:
-            raise CommandError(str(e))
+            raise CommandError(repr(e))
         alarm_json = json.dumps(alarm, cls=JSON_AlarmClock)
         return (f'alarms/alarm{index}', alarm_json)
 
@@ -250,7 +233,7 @@ class WriteAlarmCommand(Command):
             ac.write_alarm(index, alarm)
             ac.save_EEPROM()
         except Exception as e:
-            raise CommandError(f"{type(e).__name__}: {str(e)}")
+            raise CommandError(repr(e))
 
 
 class RunCommandCommand(Command):
@@ -260,7 +243,7 @@ class RunCommandCommand(Command):
         try:
             return json.dumps(ac.run_command(msg), default=str)
         except Exception as e:
-            raise CommandError(f"{type(e).__name__}: {str(e)}")
+            raise CommandError(repr(e))
 
 
 @dataclass
@@ -303,11 +286,6 @@ class AlarmClockMQTT:
             'alarms': AlarmsCommand(),
             'alarm/write': WriteAlarmCommand(),
             'run_command': RunCommandCommand(),
-        }
-
-        self.ENTITIES: Dict[str, Entity] = {
-            'rtc': rtc,
-            'timer': timer,
         }
 
         _LOGGER.info(f'err topic: {self._config.err_topic}')
@@ -388,20 +366,8 @@ class AlarmClockMQTT:
             payload = msg.payload.decode('ascii')
             if command_id in self.COMMANDS:
                 self._execute_command(client, command_id, payload)
-            elif command_id in self.ENTITIES and payload == '?':
-                entity_id = command_id
-                self._report_state(client, entity_id)
             else:
                 self._error(client, f'Bad topic for command: {msg.topic}')
-
-    def _report_state(self, client: mqtt.Client, entity_id: str) -> None:
-        entity = self.ENTITIES[entity_id]
-        client.publish(
-            f'{self._config.state_topic}/{entity_id}',
-            entity.get_state(self.ac),
-            # _report_state is only used for manually polled entities
-            retain=False
-        )
 
     def _report_status(self, client: mqtt.Client, onconnect=False) -> None:
         """Poll AlarmClock status & publish with retain."""
@@ -416,8 +382,8 @@ class AlarmClockMQTT:
             elif isinstance(value, Enum):
                 value = value.name
             elif isinstance(value, AmbientStatus):
-                value = str(value.target)
                 # current will be outdated, do not publish
+                value = str(value.target)
             client.publish(
                 f'{self._config.state_topic}/{attr}', value, retain=True
             )
@@ -436,15 +402,13 @@ class AlarmClockMQTT:
             for value in ret:
                 if isinstance(value, tuple):
                     topic, message = value
-                    client.publish(
-                        f'{self._config.state_topic}/{topic}',
-                        message
-                    )
                 else:
-                    client.publish(
-                        f'{self._config.state_topic}/{command_name}',
-                        value, retain=False
-                    )
+                    topic, message = command_name, value
+
+                client.publish(
+                    f'{self._config.state_topic}/{topic}',
+                    message
+                )
         except CommandError as e:
             details = '\n' + str(e) if str(e) != '' else ''
             self._error(
