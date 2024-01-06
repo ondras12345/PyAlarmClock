@@ -236,6 +236,16 @@ class WriteAlarmCommand(Command):
             raise CommandError(repr(e))
 
 
+class StopButtonCommand(Command):
+    """Emulate pressing the stop button."""
+
+    def do_command(self, ac: AlarmClock, msg: str):
+        if msg.upper() == 'STOP':
+            ac.button_stop()
+        else:
+            raise CommandError(f"invalid payload for stop: {msg}")
+
+
 class RunCommandCommand(Command):
     """Run a CLI command, parse it's YAML output and return it as JSON."""
 
@@ -285,6 +295,7 @@ class AlarmClockMQTT:
             'alarm': AlarmCommand(),
             'alarms': AlarmsCommand(),
             'alarm/write': WriteAlarmCommand(),
+            'button/stop': StopButtonCommand(),
             'run_command': RunCommandCommand(),
         }
 
