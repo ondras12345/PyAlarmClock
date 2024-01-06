@@ -47,7 +47,7 @@ class JSON_AlarmClock(json.JSONEncoder):
         return super().default(obj)
 
 
-class CommandError(Exception):
+class MQTTCommandError(Exception):
     """Error raised by an MQTT command handler."""
 
 
@@ -99,7 +99,7 @@ class Switch(Command):
         if msg in messages:
             messages[msg](ac)
         else:
-            raise CommandError()
+            raise MQTTCommandError()
 
     def turn_on(self, ac: AlarmClock):
         setattr(ac, self.name, True)
@@ -117,11 +117,11 @@ class DimmableLight(Switch):
     def do_command(self, ac: AlarmClock, msg: str) -> None:
         try:
             super().do_command(ac, msg)
-        except CommandError:
+        except MQTTCommandError:
             try:
                 setattr(ac, self.name, int(msg))
             except ValueError as e:
-                raise CommandError(repr(e))
+                raise MQTTCommandError(repr(e))
 
     def turn_on(self, ac: AlarmClock):
         setattr(ac, self.name, 255)
@@ -139,7 +139,7 @@ class RTC(Command):
         try:
             ac.RTC_time = datetime.datetime.fromisoformat(msg)
         except Exception as e:
-            raise CommandError(repr(e))
+            raise MQTTCommandError(repr(e))
 
     def get_state(self, ac: AlarmClock) -> str:
         return ac.RTC_time.astimezone().isoformat(timespec="seconds")
@@ -180,7 +180,7 @@ class CountdownTimer(Command):
                 else:
                     ac.countdown_timer.stop()
         except Exception as e:
-            raise CommandError(repr(e))
+            raise MQTTCommandError(repr(e))
 
     def get_state(self, ac: AlarmClock) -> str:
         info = ac.countdown_timer.get_all()
@@ -196,7 +196,7 @@ class AlarmCommand(Command):
             index = int(msg)
             alarm = ac.read_alarm(index)
         except ValueError as e:
-            raise CommandError(repr(e))
+            raise MQTTCommandError(repr(e))
         now = datetime.datetime.now()
         alarm_dict = {
             **alarm.__dict__,
@@ -263,7 +263,7 @@ class WriteAlarmCommand(Command):
             ac.write_alarm(index, alarm)
             ac.save_EEPROM()
         except Exception as e:
-            raise CommandError(repr(e))
+            raise MQTTCommandError(repr(e))
 
 
 class StopButtonCommand(Command):
@@ -273,7 +273,7 @@ class StopButtonCommand(Command):
         if msg.upper() == 'STOP':
             ac.button_stop()
         else:
-            raise CommandError(f"invalid payload for stop: {msg}")
+            raise MQTTCommandError(f"invalid payload for stop: {msg}")
 
 
 class RunCommandCommand(Command):
@@ -283,7 +283,7 @@ class RunCommandCommand(Command):
         try:
             return json.dumps(ac.run_command(msg), default=str)
         except Exception as e:
-            raise CommandError(repr(e))
+            raise MQTTCommandError(repr(e))
 
 
 @dataclass
@@ -451,14 +451,14 @@ class AlarmClockMQTT:
         command = self.COMMANDS[command_name]
         try:
             ret = command.do_command(self.ac, msg)
-        except CommandError as e:
+            self._publish_command_response(client, command_name, ret)
+        except MQTTCommandError as e:
             details = '\n' + str(e) if str(e) != '' else ''
             self._error(
                 client,
                 f'Bad payload for '
                 f'{self._config.command_topic}/{command_name}: {msg}{details}'
             )
-        self._publish_command_response(client, command_name, ret)
 
     def _publish_command_response(self, client: mqtt.Client,
                                   command_name: str, ret) -> None:
