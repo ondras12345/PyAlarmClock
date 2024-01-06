@@ -88,6 +88,9 @@ class AmbientStatus:
     This object is immutable to indicate that it cannot be used to send
     commands to the alarm clock.
     """
+    # warning: state_changed event (BEL) is not sent when current value
+    # changes, only if target changes. As a result, current will most likely
+    # be outdated.
     current: int
     target: int
 

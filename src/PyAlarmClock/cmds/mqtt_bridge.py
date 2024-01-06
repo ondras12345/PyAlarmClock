@@ -13,7 +13,8 @@ from dataclasses import dataclass
 from typing import Union, Optional, Dict, Tuple, List
 from getpass import getpass
 from PyAlarmClock import (AlarmClock, SerialAlarmClock, Alarm, AlarmEnabled,
-                          Signalization, DaysOfWeek, TimeOfDay, Snooze)
+                          Signalization, DaysOfWeek, TimeOfDay, Snooze,
+                          AmbientStatus)
 import paho.mqtt.client as mqtt  # type: ignore
 
 _LOGGER = logging.getLogger(__name__)
@@ -39,8 +40,6 @@ class JSON_AlarmClock(json.JSONEncoder):
             return obj.__dict__
         if isinstance(obj, DaysOfWeek):
             return obj.active_days  # TODO also return code ??
-        if isinstance(obj, AlarmEnabled):
-            return obj.name
         if (isinstance(obj, datetime.datetime) or
                 isinstance(obj, datetime.timedelta)):
             return str(obj)
@@ -48,9 +47,11 @@ class JSON_AlarmClock(json.JSONEncoder):
 
 
 class Entity:
-    """Representation of an AlarmClock attribute with a pollable state."""
+    """Representation of an AlarmClock attribute with a pollable state.
 
-    retain: bool = False
+    Only used for attributes which have to be polled manually
+    and thus aren't sent as retained messages.
+    """
 
     def get_state(self, ac: AlarmClock) -> str:
         """Get state of the entity.
@@ -75,9 +76,6 @@ class Command:
 
         The return value (if not None) of this function will be published
         in the corresponding state_topic.
-        If a corresponding entity exists and it has retain=True, the message
-        will be published with the retain flag set. This only applies to
-        single str return values.
 
         If a tuple is returned, the first value in the tuple is a topic
         under state_topic where the second value should be published.
@@ -88,21 +86,20 @@ class Command:
         raise NotImplementedError()
 
 
-class Switch(Entity, Command):
-    """A switch that can either be OFF or ON.
+class Switch(Command):
+    """A switch that can be turned OFF or ON.
 
     E.g. lamp, inhibit
     """
 
-    def __init__(self, name: str, retain: bool = False):
+    def __init__(self, name: str):
         """Initialize a switch.
 
         name must be a valid name of an AlarmClock attribute.
         """
         self.name = name
-        self.retain = retain
 
-    def do_command(self, ac: AlarmClock, msg: str) -> str:
+    def do_command(self, ac: AlarmClock, msg: str) -> None:
         messages = {
             'ON': lambda ac: self.turn_on(ac),
             'OFF': lambda ac: self.turn_off(ac),
@@ -113,7 +110,6 @@ class Switch(Entity, Command):
         msg = msg.upper()
         if msg in messages:
             messages[msg](ac)
-            return self.get_state(ac)
         else:
             raise CommandError()
 
@@ -123,26 +119,19 @@ class Switch(Entity, Command):
     def turn_off(self, ac: AlarmClock):
         setattr(ac, self.name, False)
 
-    def get_state(self, ac: AlarmClock) -> str:
-        value = getattr(ac, self.name)
-        value = 'ON' if value else 'OFF'
-        return value
-
 
 class DimmableLight(Switch):
     """A dimmable light."""
 
-    def __init__(self, name: str, retain: bool = False):
-        super().__init__(name, retain=retain)
+    def __init__(self, name: str):
+        super().__init__(name)
 
-    def do_command(self, ac: AlarmClock, msg: str):
+    def do_command(self, ac: AlarmClock, msg: str) -> None:
         try:
-            value = super().do_command(ac, msg)
-            return value
+            super().do_command(ac, msg)
         except CommandError:
             try:
                 setattr(ac, self.name, int(msg))
-                return self.get_state(ac)
             except ValueError as e:
                 raise CommandError(str(e))
 
@@ -151,9 +140,6 @@ class DimmableLight(Switch):
 
     def turn_off(self, ac: AlarmClock):
         setattr(ac, self.name, 0)
-
-    def get_state(self, ac: AlarmClock) -> str:
-        return str(getattr(ac, self.name))
 
 
 class RTC(Command, Entity):
@@ -300,9 +286,9 @@ class AlarmClockMQTT:
     def __init__(self, config: AlarmClockMQTTConfig):
         self._config = config
 
-        ambient = DimmableLight('ambient', retain=True)
-        lamp = Switch('lamp', retain=True)
-        inhibit = Switch('inhibit', retain=True)
+        ambient = DimmableLight('ambient')
+        lamp = Switch('lamp')
+        inhibit = Switch('inhibit')
         rtc = RTC()
         timer = CountdownTimer()
 
@@ -320,9 +306,6 @@ class AlarmClockMQTT:
         }
 
         self.ENTITIES: Dict[str, Entity] = {
-            'ambient': ambient,
-            'lamp': lamp,
-            'inhibit': inhibit,
             'rtc': rtc,
             'timer': timer,
         }
@@ -346,8 +329,10 @@ class AlarmClockMQTT:
             client.username_pw_set(self._config.username,
                                    self._config.password)
 
-        client.will_set(f'{self._config.state_topic}/available', 'offline',
-                        retain=True)
+        client.will_set(
+            f'{self._config.state_topic}/available',
+            'offline', retain=True
+        )
         client.connect(self._config.hostname, self._config.port, 60)
 
         with SerialAlarmClock(self._config.device,
@@ -358,9 +343,7 @@ class AlarmClockMQTT:
                     client.loop_write()
                     client.loop_misc()
                     if self.ac.state_changed():
-                        self._report_state(client, 'lamp')
-                        self._report_state(client, 'inhibit')
-                        self._report_state(client, 'ambient')
+                        self._report_status(client)
                     time.sleep(0.1)
             except KeyboardInterrupt:
                 client.publish(f'{self._config.state_topic}/available',
@@ -394,8 +377,7 @@ class AlarmClockMQTT:
         _LOGGER.debug(f'Subscribing to {self._config.command_topic}/#')
         client.subscribe(f'{self._config.command_topic}/#')
 
-        for entity_id in self.ENTITIES:
-            self._report_state(client, entity_id)
+        self._report_status(client)
 
     def _on_message(self, client, userdata, msg) -> None:
         _LOGGER.debug('%s: %s', msg.topic, msg.payload)
@@ -417,8 +399,31 @@ class AlarmClockMQTT:
         client.publish(
             f'{self._config.state_topic}/{entity_id}',
             entity.get_state(self.ac),
-            retain=entity.retain
+            # _report_state is only used for manually polled entities
+            retain=False
         )
+
+    def _report_status(self, client: mqtt.Client) -> None:
+        """Poll AlarmClock status & publish with retain."""
+        status = self.ac.status
+        for attr in ('ambient', 'lamp', 'inhibit', 'display_backlight',
+                     'active_alarm_ids', 'alarm_with_active_ambient_ids'):
+            value = getattr(status, attr)
+            if isinstance(value, bool):
+                value = 'ON' if value else 'OFF'
+            elif isinstance(value, list):
+                value = json.dumps(value)
+            elif isinstance(value, Enum):
+                value = value.name
+            elif isinstance(value, AmbientStatus):
+                value = str(value.target)
+                # current will be outdated, do not publish
+            client.publish(
+                f'{self._config.state_topic}/{attr}', value, retain=True
+            )
+        if status.alarms_changed:
+            self._execute_command(client, 'alarms', '?')
+            # TODO retain alarms ??
 
     def _execute_command(self, client: mqtt.Client, command_name: str,
                          msg: str) -> None:
@@ -436,13 +441,9 @@ class AlarmClockMQTT:
                         message
                     )
                 else:
-                    retain = False
-                    if command_name in self.ENTITIES:
-                        retain = self.ENTITIES[command_name].retain
-
                     client.publish(
                         f'{self._config.state_topic}/{command_name}',
-                        value, retain=retain
+                        value, retain=False
                     )
         except CommandError as e:
             details = '\n' + str(e) if str(e) != '' else ''
