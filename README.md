@@ -2,7 +2,7 @@
 A Python library for interfacing with my [AlarmClock][AlarmClock] over
 a serial port.
 
-Requires AlarmClock version >=0.5.0.
+Requires AlarmClock version >=0.7.0.
 
 
 ## Installation
