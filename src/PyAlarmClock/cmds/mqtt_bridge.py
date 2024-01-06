@@ -52,13 +52,16 @@ class CommandError(Exception):
 class Command:
     """Representation of an MQTT command handler."""
 
+    retain = False
+
     def do_command(
         self, ac: AlarmClock, msg: str
     ) -> Union[None, str, Tuple[str, str], List]:
         """Handle reception of msg.
 
         The return value (if not None) of this function will be published
-        in the corresponding state_topic.
+        in the corresponding state_topic. If the retain attribute is set on
+        the command, the messages will sent with retain=True.
 
         If a tuple is returned, the first value in the tuple is a topic
         under state_topic where the second value should be published.
@@ -198,6 +201,10 @@ class AlarmCommand(Command):
 
 class AlarmsCommand(Command):
     """Read all alarms at once, faster than reading one by one."""
+
+    # We poll alarms automatically (see _report_status),
+    # so it should be safe to use retain=True.
+    retain = True
 
     def do_command(self, ac: AlarmClock, msg: str) -> List[Tuple[str, str]]:
         alarms = ac.read_alarms()
@@ -395,17 +402,18 @@ class AlarmClockMQTT:
             elif isinstance(value, AmbientStatus):
                 # current will be outdated, do not publish
                 value = str(value.target)
+            # TODO only publish if it changed
             client.publish(
                 f'{self._config.state_topic}/{attr}', value, retain=True
             )
         if status.alarms_changed or onconnect:
             self._execute_command(client, 'alarms', '?')
-            # TODO retain alarms ??
 
     def _execute_command(self, client: mqtt.Client, command_name: str,
                          msg: str) -> None:
         try:
-            ret = self.COMMANDS[command_name].do_command(self.ac, msg)
+            command = self.COMMANDS[command_name]
+            ret = command.do_command(self.ac, msg)
             if ret is None:
                 return
             if not isinstance(ret, list):
@@ -418,7 +426,7 @@ class AlarmClockMQTT:
 
                 client.publish(
                     f'{self._config.state_topic}/{topic}',
-                    message
+                    message, retain=command.retain
                 )
         except CommandError as e:
             details = '\n' + str(e) if str(e) != '' else ''
