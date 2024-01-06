@@ -377,7 +377,7 @@ class AlarmClockMQTT:
         _LOGGER.debug(f'Subscribing to {self._config.command_topic}/#')
         client.subscribe(f'{self._config.command_topic}/#')
 
-        self._report_status(client)
+        self._report_status(client, onconnect=True)
 
     def _on_message(self, client, userdata, msg) -> None:
         _LOGGER.debug('%s: %s', msg.topic, msg.payload)
@@ -403,7 +403,7 @@ class AlarmClockMQTT:
             retain=False
         )
 
-    def _report_status(self, client: mqtt.Client) -> None:
+    def _report_status(self, client: mqtt.Client, onconnect=False) -> None:
         """Poll AlarmClock status & publish with retain."""
         status = self.ac.status
         for attr in ('ambient', 'lamp', 'inhibit', 'display_backlight',
@@ -421,7 +421,7 @@ class AlarmClockMQTT:
             client.publish(
                 f'{self._config.state_topic}/{attr}', value, retain=True
             )
-        if status.alarms_changed:
+        if status.alarms_changed or onconnect:
             self._execute_command(client, 'alarms', '?')
             # TODO retain alarms ??
 
