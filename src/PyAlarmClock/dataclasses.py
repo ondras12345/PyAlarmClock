@@ -1,5 +1,6 @@
+import datetime
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional
 from .const import AlarmEnabled, DisplayBacklightStatus
 from .days_of_week import DaysOfWeek
 
@@ -49,6 +50,29 @@ class Alarm:
     time: TimeOfDay
     snooze: Snooze
     signalization: Signalization
+
+    def get_next_alarm_time(
+        self,
+        now: datetime.datetime
+    ) -> Optional[datetime.datetime]:
+        if self.enabled not in [AlarmEnabled.SGL, AlarmEnabled.RPT]:
+            return None
+        # Check the next 8 days (It might only be enabled for one day of the
+        # week & now.time might be after self.time.
+        for i in range(8):
+            day = now + datetime.timedelta(days=i)
+            enabled = self.days_of_week.get_day(day.isoweekday())
+            if not enabled:
+                continue
+            alarm_time = datetime.datetime(
+                day.year, day.month, day.day,
+                self.time.hours, self.time.minutes
+            )
+            if alarm_time > now:
+                return alarm_time
+
+        # not enabled for any day of the week
+        return None
 
     @classmethod
     def from_dict(cls, d):
