@@ -35,3 +35,4 @@ class DisplayBacklightStatus(Enum):
     OFF = 0
     DIM = 1
     BRIGHT = 2
+    PERMANENT = 3
